@@ -1,0 +1,11 @@
+[Unit]
+Description=ABR Nutzerstatistik taeglich um 04:00 senden
+
+[Timer]
+OnCalendar=*-*-* 04:00:00
+Persistent=true
+AccuracySec=1min
+
+[Install]
+WantedBy=timers.target
+

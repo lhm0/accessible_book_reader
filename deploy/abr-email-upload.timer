@@ -1,0 +1,11 @@
+[Unit]
+Description=ABR E-Mail-Dateiupload regelmaessig pruefen
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=2min
+Persistent=true
+RandomizedDelaySec=15s
+
+[Install]
+WantedBy=timers.target

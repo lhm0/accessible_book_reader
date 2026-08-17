@@ -1,0 +1,5 @@
+﻿Designator,Footprint,Quantity,Value,LCSC Part #
+J1,3_pin,1,Conn_01x03_Pin,
+"J2, J5",2_pin,2,Conn_01x02_Pin,
+J3,IDC-Header_2x05_P2.54mm_Vertical_centered,1,10 pin IDC connector,
+"SW1, SW2, SW3",OmronTaster,3,SW_MEC_5G,

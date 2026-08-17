@@ -1,0 +1,14 @@
+[Unit]
+Description=Configure ABR Wi-Fi profiles for automatic failover
+Wants=NetworkManager.service
+After=NetworkManager.service
+Before=network-online.target
+
+[Service]
+Type=oneshot
+User=__ABR_USER__
+WorkingDirectory=__ABR_REPO__
+ExecStart=__ABR_PYTHON__ -m abr.wifi_profiles configure
+
+[Install]
+WantedBy=multi-user.target

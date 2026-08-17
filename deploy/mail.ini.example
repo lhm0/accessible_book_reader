@@ -1,0 +1,15 @@
+[mail]
+# E-Mail-Adresse des Kontos auf dem Raspberry Pi
+address = abr-device@example.com
+# Empfaenger fuer Downloads und Statistik; nur dieser Absender darf hochladen
+recipient = owner@example.com
+# Meist identisch mit address
+username = abr-device@example.com
+password = HIER_DAS_SEPARATE_E_MAIL_PASSWORT_EINTRAGEN
+
+# Diese Werte bei der Einrichtung anhand des Mailanbieters pruefen.
+smtp_host = smtp.example.com
+smtp_port = 465
+imap_host = imap.example.com
+imap_port = 993
+inbox = INBOX

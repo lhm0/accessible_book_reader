@@ -1,0 +1,13 @@
+﻿Designator,Footprint,Quantity,Value,LCSC Part #
+A1,RaspberryPiPico,1,SC0918,
+C1,CP_Radial_D10.0mm_P5.00mm_slim_silkscreen,1,470µ,
+J1,3_pin_jumper,1,Conn_01x03_Pin,
+J2,RPI_HAT_back,1,RPi_GPIO,
+"J3, J7",JST_XH_B2B-XH-A_1x02_P2.50mm_Vertical,2,Conn_01x02_Pin,
+"J4, J6",JST_XH_B4B-XH-A_1x04_P2.50mm_Vertical,2,Conn_01x04_Pin,
+J5,JST_XH_B7B-XH-A_1x07_P2.50mm_Vertical,1,Conn_01x07_Pin,
+J8,3_pin_jumper,1,ext. supply,
+Q1,TO220_horizontal,1,FQP30N06L,
+R1,R_Axial_DIN0207_L6.3mm_D2.5mm_P10.16mm_Horizontal,1,100,
+R2,R_Axial_DIN0207_L6.3mm_D2.5mm_P10.16mm_Horizontal,1,100k,
+U1,MAX98357A_breakout,1,MAX98357A,

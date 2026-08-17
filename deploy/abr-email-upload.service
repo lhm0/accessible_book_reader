@@ -1,0 +1,13 @@
+[Unit]
+Description=ABR E-Mail-Dateiupload pruefen
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=__ABR_USER__
+WorkingDirectory=__ABR_REPO__
+ExecStart=__ABR_PYTHON__ -m abr.remote_mail_upload --config __ABR_CONFIG__ --home __ABR_HOME__
+NoNewPrivileges=true
+PrivateTmp=true
+

@@ -1,0 +1,65 @@
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+.Spotlight-V100
+.Trashes
+Icon?
+ehthumbs.db
+Thumbs.db
+
+# Finder / Tags
+*.icloud
+
+# Editoren / IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# KiCad: lokale Sitzung, Cache und automatische Sicherungen
+*.kicad_prl
+_autosave-*
+fp-info-cache
+*-backups/
+production/backups/
+
+# Logs
+*.log
+
+# Lokale Konfiguration mit persoenlichen Maildaten
+mail.ini
+
+# Temporäre Dateien
+tmp/
+temp/
+
+# Python virtual environments
+.venv/
+venv/
+env/
+
+# Python cache/build
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+dist/
+build/
+
+# Projekt-Ausgaben / große Artefakte
+runs/
+.piper_voices/
+captures/
+library/
+datasheets/
+pi_timings/
+testdata/**
+!testdata/README.md
+!testdata/.gitkeep
+/calibration/calibrate1.jpg
+*.onnx
+*.aiff
+calibration/out/*.npz

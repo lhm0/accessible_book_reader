@@ -1,0 +1,12 @@
+[Unit]
+Description=ABR taegliche Nutzerstatistik per E-Mail senden
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=__ABR_USER__
+WorkingDirectory=__ABR_REPO__
+ExecStart=__ABR_PYTHON__ -m abr.usage_report --library-root __ABR_LIBRARY__ --config __ABR_CONFIG__
+NoNewPrivileges=true
+PrivateTmp=true

@@ -1,0 +1,28 @@
+[Unit]
+Description=Accessible Book Reader Control Panel
+Wants=network-online.target
+After=network-online.target sound.target
+
+[Service]
+Type=simple
+User=__ABR_USER__
+Group=__ABR_GROUP__
+WorkingDirectory=__ABR_REPO__
+
+Environment=HOME=__ABR_HOME__
+Environment=PYTHONUNBUFFERED=1
+Environment=PATH=__ABR_VENV_BIN__:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+ExecStart=__ABR_PYTHON__ __ABR_REPO__/hardware/control_panel_service.py --gpio-backend auto --job-mode capture-ocr --library-root __ABR_REPO__/library --nfc-mode gateway --page-tts-speed 0.85 --page-tts-backend google-standard-enhanced --chapter-summary-target-pages 0.75 --book-summary-target-pages 0.75
+
+Restart=always
+RestartSec=5s
+KillSignal=SIGINT
+TimeoutStopSec=30s
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=abr-control-panel
+
+[Install]
+WantedBy=multi-user.target

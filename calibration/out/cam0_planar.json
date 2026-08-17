@@ -1,0 +1,64 @@
+{
+  "mode": "single_view_charuco_global_undistort",
+  "input_image": "calibration/shots/cam0_charuco_01.jpg",
+  "board_json": "calibration/out/charuco_160x240.json",
+  "image_width": 4656,
+  "image_height": 3496,
+  "alpha": 1.0,
+  "crop_valid": false,
+  "perspective_rectified": true,
+  "perspective_pixels_per_mm": 15.420283317565918,
+  "perspective_output_size": [
+    2468,
+    3702
+  ],
+  "charuco_corner_count": 75,
+  "reprojection_rms_px": 2.1298887378689373,
+  "camera_matrix": [
+    [
+      11084.486619361782,
+      0.0,
+      2382.6084170156837
+    ],
+    [
+      0.0,
+      11059.985714839486,
+      1779.428360089119
+    ],
+    [
+      0.0,
+      0.0,
+      1.0
+    ]
+  ],
+  "dist_coeffs": [
+    -4.605826832601288,
+    14.998411292033555,
+    0.0,
+    0.0,
+    57.799081333877645
+  ],
+  "new_camera_matrix": [
+    [
+      8283.16600988241,
+      0.0,
+      2382.1411159540526
+    ],
+    [
+      0.0,
+      8277.690130765994,
+      1781.1249349890113
+    ],
+    [
+      0.0,
+      0.0,
+      1.0
+    ]
+  ],
+  "valid_roi": [
+    61,
+    232,
+    4527,
+    3024
+  ]
+}

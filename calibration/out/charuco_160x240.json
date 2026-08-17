@@ -1,0 +1,12 @@
+{
+  "board_width_mm": 160.0,
+  "board_height_mm": 240.0,
+  "squares_x": 8,
+  "squares_y": 12,
+  "square_length_mm": 20.0,
+  "marker_length_mm": 14.0,
+  "dictionary": "DICT_5X5_50",
+  "dpi": 300,
+  "pixel_width": 1890,
+  "pixel_height": 2835
+}

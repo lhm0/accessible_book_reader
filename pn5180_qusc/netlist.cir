@@ -1,0 +1,38 @@
+* Qucs 26.1.0  PN5180_Matching.sch
+.PARAM C1 = 20p
+.PARAM C2 = 180p
+L0A TX1 _net0  470N 
+L0B TX2 _net1  470N 
+C0A 0 _net0  127P 
+C0B 0 _net1  127P 
+V1 TX1 TX2 DC 0 SIN(0 1 1K 0 0 0) AC 1 ACPHASE 0
+L1 ant_top ant_bottom  1.33U 
+RQA _net2 ant_top  1 tc1=0.0 tc2=0.0 
+RQB _net3 ant_bottom  1 tc1=0.0 tc2=0.0 
+C2A 0 _net2  {C2} 
+C2B 0 _net3  {C2} 
+C1A _net0 _net2  {C1} 
+C1B _net1 _net3  {C1} 
+
+.control
+
+ac lin 501 12meg 15meg 
+let Vin = v(tx1,tx2)
+let Vant = v(ant_top,ant_bottom)
+let Zin = Vin / (-v1#branch)
+let Rin = real(Zin)
+let Xin = imag(Zin)
+let Zmag = mag(Zin)
+let Zphase = ph(Zin)*180/pi
+let VantMag = mag(Vant)
+let VantPhase = ph(Vant)*180/pi
+let ZerrR = real(Zin)-20
+let ZerrX = imag(Zin)
+let Error = sqrt(ZerrR*ZerrR + ZerrX*ZerrX)
+write spice4qucs.ac1.plot v(TX1) v(TX2) v(ant_bottom) v(ant_top) Vin Vant Zin Rin Xin Zmag Zphase VantMag VantPhase ZerrR ZerrX Error
+destroy all
+reset
+
+exit
+.endc
+.END

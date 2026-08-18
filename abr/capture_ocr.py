@@ -386,7 +386,11 @@ def detect_page_orientation_from_text_lines(
 ) -> dict[str, object]:
     """Determine 0/180 page orientation from three inexpensive line crops."""
     started = time.monotonic()
-    line_images, line_boxes = _select_orientation_line_images(image, count=ORIENTATION_LINE_COUNT)
+    line_images, line_boxes = ocr_backend.detect_text_line_crops(
+        image,
+        count=ORIENTATION_LINE_COUNT,
+        language=language,
+    )
     selection_sec = time.monotonic() - started
 
     classifier_started = time.monotonic()
@@ -436,71 +440,6 @@ def detect_page_orientation_from_text_lines(
             "orientation_sec": selection_sec + classifier_sec,
         },
     }
-
-
-def _select_orientation_line_images(
-    image: ImageArray,
-    *,
-    count: int = ORIENTATION_LINE_COUNT,
-) -> tuple[list[ImageArray], list[tuple[int, int, int, int]]]:
-    """Find likely long text rows using a cheap horizontal ink projection."""
-    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    height, width = gray.shape[:2]
-    # Local thresholding is essential here: the glass platen, daylight and
-    # page curvature create gradients large enough for a global Otsu threshold
-    # to merge most of a page into one contour.
-    inverted = cv2.adaptiveThreshold(
-        gray,
-        255,
-        cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
-        cv2.THRESH_BINARY_INV,
-        81,
-        15,
-    )
-    kernel_width = max(15, width // 80)
-    joined = cv2.morphologyEx(
-        inverted,
-        cv2.MORPH_CLOSE,
-        cv2.getStructuringElement(cv2.MORPH_RECT, (kernel_width, 3)),
-    )
-    contours = cv2.findContours(joined, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)[0]
-    candidates: list[tuple[float, tuple[int, int, int, int]]] = []
-    for contour in contours:
-        x, y, w, h = cv2.boundingRect(contour)
-        if w < width * 0.18 or w > width * 0.72:
-            continue
-        if h < max(8, height * 0.003) or h > height * 0.05:
-            continue
-        if y <= height * 0.08 or y + h >= height * 0.92:
-            continue
-        aspect = w / max(1, h)
-        if aspect < 3.0:
-            continue
-        candidates.append((float(w * min(aspect, 20.0)), (x, y, w, h)))
-
-    selected: list[tuple[int, int, int, int]] = []
-    min_vertical_distance = max(12, height // 20)
-    for _score, box in sorted(candidates, reverse=True):
-        center_y = box[1] + box[3] // 2
-        if any(abs(center_y - (other[1] + other[3] // 2)) < min_vertical_distance for other in selected):
-            continue
-        selected.append(box)
-        if len(selected) == count:
-            break
-    selected.sort(key=lambda box: box[1])
-
-    crops: list[ImageArray] = []
-    padded_boxes: list[tuple[int, int, int, int]] = []
-    for x, y, w, h in selected:
-        pad_x = max(4, w // 50)
-        pad_y = max(3, h // 3)
-        x0 = max(0, x - pad_x)
-        y0 = max(0, y - pad_y)
-        x1 = min(width, x + w + pad_x)
-        y1 = min(height, y + h + pad_y)
-        crops.append(image[y0:y1, x0:x1].copy())
-        padded_boxes.append((x0, y0, x1 - x0, y1 - y0))
-    return crops, padded_boxes
 
 
 _VALID_WORD = re.compile(r"[A-Za-zÄÖÜäöüß]{2,}")

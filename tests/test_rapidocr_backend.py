@@ -186,6 +186,33 @@ def test_rapidocr_backend_exposes_textline_orientation_classifier() -> None:
     ]
 
 
+def test_rapidocr_backend_detects_three_tight_long_textline_crops() -> None:
+    image = np.zeros((500, 800, 3), dtype=np.uint8)
+
+    class FakeRapidOCR:
+        def __call__(self, _image, **kwargs):
+            assert kwargs == {"use_det": True, "use_cls": False, "use_rec": False}
+            return SimpleNamespace(
+                boxes=[
+                    [(100, 50), (600, 50), (600, 80), (100, 80)],
+                    [(120, 180), (650, 180), (650, 215), (120, 215)],
+                    [(110, 310), (620, 310), (620, 342), (110, 342)],
+                    [(10, 450), (40, 450), (40, 480), (10, 480)],
+                ],
+                scores=[0.92, 0.95, 0.90, 0.99],
+            )
+
+    backend = RapidOCRBackend()
+    backend._engines["en"] = FakeRapidOCR()
+
+    crops, boxes = backend.detect_text_line_crops(image, count=3, language="en")
+
+    assert len(crops) == 3
+    assert len(boxes) == 3
+    assert [box[1] for box in boxes] == sorted(box[1] for box in boxes)
+    assert all(crop.shape[1] > crop.shape[0] * 3 for crop in crops)
+
+
 def test_rapidocr_backend_keeps_german_constructor_unchanged() -> None:
     constructor_calls: list[dict[str, object]] = []
 

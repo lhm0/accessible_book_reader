@@ -28,6 +28,7 @@ from abr.book import (
     PageRecord,
     SummaryManager,
     SummaryService,
+    normalize_tag_id,
 )
 from abr.control.audio_volume import AudioVolumeController
 from abr.control.artifact_cleanup import ArtifactCleaner, ArtifactCleanupConfig
@@ -866,6 +867,7 @@ class ForegroundJobManager:
         tag_id: str | None = None,
         book_context_resolver: Callable[[], CaptureBookContext | None] | None = None,
         page_ingest_submitter: Callable[[PageIngestRequest], Event | None] | None = None,
+        orientation_store: BookStore | None = None,
     ) -> ForegroundJobHandle:
         spec = ForegroundJobSpec(
             job_type=ForegroundJobType.CAPTURE_OCR,
@@ -875,6 +877,7 @@ class ForegroundJobManager:
                 tag_id=tag_id,
                 book_context_resolver=book_context_resolver,
                 page_ingest_submitter=page_ingest_submitter,
+                orientation_store=orientation_store,
             ),
         )
         return self.start_foreground_job(spec)
@@ -1201,6 +1204,9 @@ class RuntimeController:
                             tag_id=tag_id,
                             book_context_resolver=self._fetch_capture_book_context if async_nfc else None,
                             page_ingest_submitter=self.page_ingest_service.submit,
+                            orientation_store=BookStore(
+                                self.page_ingest_config.library_root.expanduser().resolve()
+                            ),
                         )
                     else:
                         self.job_manager.start_capture_ocr(self.capture_ocr_config)
@@ -1421,6 +1427,21 @@ class RuntimeController:
                     tag_id=tag_id,
                     orientation=self.capture_ocr_config.iso15693_only_orientation,
                 )
+            direct_tag_id = normalize_tag_id(secondary.uid)
+            if store.load_book(direct_tag_id) is not None:
+                return CaptureBookContext(
+                    tag_id=direct_tag_id,
+                    orientation=self.capture_ocr_config.iso15693_only_orientation,
+                )
+        unknown_iso15693_ids = {
+            normalize_tag_id(tag.uid)
+            for tag in scan.iso15693_tags
+        }
+        if len(unknown_iso15693_ids) == 1:
+            return CaptureBookContext(
+                tag_id=unknown_iso15693_ids.pop(),
+                orientation=self.capture_ocr_config.iso15693_only_orientation,
+            )
         return None
 
     def _ensure_book_context(self, tag_id: str) -> bool:
@@ -1793,6 +1814,7 @@ def _build_capture_ocr_runner(
     tag_id: str | None = None,
     book_context_resolver: Callable[[], CaptureBookContext | None] | None = None,
     page_ingest_submitter: Callable[[PageIngestRequest], Event | None] | None = None,
+    orientation_store: BookStore | None = None,
 ) -> Callable[[Event, Callable[[str], None]], None]:
     from abr.capture_ocr import run_capture_ocr_pages, write_capture_ocr_report
     from abr.hardware.double_page_capture import publish_latest
@@ -1838,8 +1860,9 @@ def _build_capture_ocr_runner(
             if context is None:
                 raise RuntimeError("Kein ISO14443A-Tag und keine bekannte ISO15693-Zuordnung gefunden.")
             resolved_tag_id = context.tag_id
-            orientation = context.orientation
-        preprocess_config = _preprocess_config_for_orientation(default_preprocess_config, orientation)
+            # NFC identifies the book only. Page orientation is determined from
+            # text immediately before the normal OCR run.
+        preprocess_config = default_preprocess_config
         if resolved_tag_id is None and incremental_ingest:
             raise RuntimeError("Keine Buch-Tag-ID fuer page-ingest verfuegbar.")
 
@@ -1869,14 +1892,23 @@ def _build_capture_ocr_runner(
             progress_callback(f"OCR abgeschlossen, Ergebnis archiviert unter {stable_output_dir}.")
         else:
             case_dir = session_dir / "case"
+            orientation, orientation_message = _resolve_capture_orientation(
+                case_dir,
+                language=config.language,
+                preprocess_config=default_preprocess_config,
+                store=orientation_store,
+                tag_id=resolved_tag_id,
+            )
+            progress_callback(orientation_message)
+            _apply_capture_orientation(case_dir, orientation)
+            preprocess_config = _preprocess_config_for_orientation(default_preprocess_config, orientation)
             if orientation is not None:
-                _apply_capture_orientation(case_dir, orientation)
                 left_camera, right_camera = _camera_assignment_after_orientation(
                     capture_metadata,
                     orientation,
                 )
                 progress_callback(
-                    "NFC-Zuordnung angewendet: "
+                    "OCR-Orientierungszuordnung angewendet: "
                     f"{_orientation_label(orientation)}, "
                     f"linkes Bild = Kamera {left_camera}, "
                     f"rechtes Bild = Kamera {right_camera}, "
@@ -2032,6 +2064,65 @@ def _apply_capture_orientation(case_dir: Path, orientation: str) -> None:
         raise ValueError(f"Unbekannte Buchorientierung: {orientation}")
 
     apply_rotation_in_place(case_dir / "right.jpg", 180)
+
+
+def _detect_capture_orientation(
+    case_dir: Path,
+    *,
+    language: str,
+    preprocess_config,
+) -> dict[str, object]:
+    import cv2
+
+    from abr.capture_ocr import detect_page_orientation_from_text_lines
+    from abr.ocr.factory import create_ocr_backend
+    from abr.preprocessing.enhance_for_ocr import preprocess_image
+
+    probe_path = case_dir / "left.jpg"
+    orientation_probe = cv2.imread(str(probe_path), cv2.IMREAD_COLOR)
+    if orientation_probe is None:
+        raise FileNotFoundError(f"Orientierungsbild konnte nicht geladen werden: {probe_path}")
+    prepared_probe = preprocess_image(
+        orientation_probe,
+        config=preprocess_config,
+        page_id="page_1",
+        source_path=probe_path,
+    ).ocr_input
+    return detect_page_orientation_from_text_lines(
+        prepared_probe,
+        create_ocr_backend("rapidocr"),
+        language=language,
+    )
+
+
+def _resolve_capture_orientation(
+    case_dir: Path,
+    *,
+    language: str,
+    preprocess_config,
+    store: BookStore | None,
+    tag_id: str | None,
+) -> tuple[str, str]:
+    from abr.capture_ocr import OrientationDetectionError
+
+    try:
+        result = _detect_capture_orientation(
+            case_dir,
+            language=language,
+            preprocess_config=preprocess_config,
+        )
+    except OrientationDetectionError as exc:
+        orientation = (
+            store.load_page_orientation(tag_id)
+            if store is not None and tag_id is not None
+            else BookStore.DEFAULT_PAGE_ORIENTATION
+        )
+        return orientation, f"OCR-Orientierung nicht bestimmbar ({exc}); gespeicherter Merker {orientation} wird verwendet."
+
+    orientation = "reader1" if int(result["rotation_deg"]) == 180 else "reader2"
+    if store is not None and tag_id is not None:
+        store.save_page_orientation(tag_id, orientation, source="ocr")
+    return orientation, f"OCR-Orientierung: {result['reason']}; Merker auf {orientation} aktualisiert."
 
 
 def _preprocess_config_for_orientation(default_config, orientation: str | None):

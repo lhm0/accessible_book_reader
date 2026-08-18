@@ -906,7 +906,14 @@ def test_capture_ocr_runner_submits_left_then_right_ingest_requests_in_increment
         published_latest.append(session_dir_arg)
 
     original_run_subprocess = runtime_module._run_subprocess
+    original_detect_orientation = runtime_module._detect_capture_orientation
+    original_apply_orientation = runtime_module._apply_capture_orientation
     runtime_module._run_subprocess = _fake_run_subprocess
+    runtime_module._detect_capture_orientation = lambda case_dir, *, language, preprocess_config: {
+        "rotation_deg": 0,
+        "reason": f"test {case_dir} {language}",
+    }
+    runtime_module._apply_capture_orientation = lambda case_dir, orientation: None
 
     import abr.capture_ocr as capture_ocr_module
     import abr.hardware.double_page_capture as double_page_capture_module
@@ -937,6 +944,8 @@ def test_capture_ocr_runner_submits_left_then_right_ingest_requests_in_increment
         runner(runtime_module.Event(), lambda message: None)
     finally:
         runtime_module._run_subprocess = original_run_subprocess
+        runtime_module._detect_capture_orientation = original_detect_orientation
+        runtime_module._apply_capture_orientation = original_apply_orientation
         enhance_module.enhance_page_image_path = original_enhance  # type: ignore[method-assign]
         enhance_module._write_manifest = original_manifest  # type: ignore[method-assign]
         capture_ocr_module.run_capture_ocr_pages = original_run_pages  # type: ignore[method-assign]
@@ -2823,6 +2832,71 @@ def test_capture_book_context_resolves_type_v_only_with_configured_fallback_orie
     assert context == runtime_module.CaptureBookContext("04A1B2C3", "reader1")
 
 
+def test_capture_book_context_creates_new_book_from_single_type_v_tag(tmp_path: Path) -> None:
+    manager = ForegroundJobManager()
+    scan = NFCTagScan(tags=(NFCTag("e004010916f30001", "ISO15693", 2),))
+    controller = RuntimeController(
+        monitor=FrontPanelMonitor(gpio=_FakeGPIO()),
+        job_manager=manager,
+        capture_ocr_config=CaptureOCRJobConfig(project_root=tmp_path, language="en"),
+        page_ingest_config=PageIngestRuntimeConfig(library_root=tmp_path / "library"),
+        nfc_tag_reader=_AsyncNFCTagReader(scan),
+    )
+    try:
+        context = controller._fetch_capture_book_context()
+    finally:
+        controller.stop()
+        manager.shutdown()
+
+    assert context == runtime_module.CaptureBookContext("E004010916F30001", "reader2")
+    store = runtime_module.BookStore(tmp_path / "library")
+    book = store.load_book("E004010916F30001")
+    assert book is not None
+    assert book.language == "en"
+    assert store.load_page_orientation("E004010916F30001") == "reader2"
+
+
+def test_capture_book_context_reopens_book_keyed_directly_by_type_v_tag(tmp_path: Path) -> None:
+    store = runtime_module.BookStore(tmp_path / "library")
+    store.ensure_book("E004010916F30001")
+    manager = ForegroundJobManager()
+    scan = NFCTagScan(tags=(NFCTag("E004010916F30001", "ISO15693", 1),))
+    controller = RuntimeController(
+        monitor=FrontPanelMonitor(gpio=_FakeGPIO()),
+        job_manager=manager,
+        page_ingest_config=PageIngestRuntimeConfig(library_root=tmp_path / "library"),
+    )
+    try:
+        context = controller._resolve_capture_book_context(scan)
+    finally:
+        controller.stop()
+        manager.shutdown()
+
+    assert context == runtime_module.CaptureBookContext("E004010916F30001", "reader2")
+
+
+def test_capture_book_context_rejects_multiple_unknown_type_v_tags(tmp_path: Path) -> None:
+    manager = ForegroundJobManager()
+    scan = NFCTagScan(
+        tags=(
+            NFCTag("E004010916F30001", "ISO15693", 1),
+            NFCTag("E004010916F30002", "ISO15693", 2),
+        )
+    )
+    controller = RuntimeController(
+        monitor=FrontPanelMonitor(gpio=_FakeGPIO()),
+        job_manager=manager,
+        page_ingest_config=PageIngestRuntimeConfig(library_root=tmp_path / "library"),
+    )
+    try:
+        context = controller._resolve_capture_book_context(scan)
+    finally:
+        controller.stop()
+        manager.shutdown()
+
+    assert context is None
+
+
 def test_nfc_orientations_override_legacy_right_page_rotation() -> None:
     from abr.preprocessing.processor import PreprocessorConfig
 
@@ -2857,6 +2931,82 @@ def test_nfc_orientation_swaps_camera_pages_only_for_reader1(tmp_path: Path, mon
     assert left.read_bytes() == b"camera-right"
     assert right.read_bytes() == b"camera-left"
     assert rotated_paths == [(right, 180), (right, 180)]
+
+
+def test_ocr_orientation_maps_upright_to_reader2_and_upside_down_to_reader1(tmp_path: Path, monkeypatch) -> None:
+    case_dir = tmp_path / "case"
+    case_dir.mkdir()
+    decisions = iter((0, 180))
+    applied: list[str] = []
+
+    monkeypatch.setattr(
+        runtime_module,
+        "_detect_capture_orientation",
+        lambda case_dir, *, language, preprocess_config: {
+            "rotation_deg": next(decisions),
+            "reason": language,
+        },
+    )
+    monkeypatch.setattr(
+        runtime_module,
+        "_apply_capture_orientation",
+        lambda case_dir, orientation: applied.append(orientation),
+    )
+
+    for _ in range(2):
+        result = runtime_module._detect_capture_orientation(
+            case_dir,
+            language="de",
+            preprocess_config=object(),
+        )
+        orientation = "reader1" if result["rotation_deg"] == 180 else "reader2"
+        runtime_module._apply_capture_orientation(case_dir, orientation)
+
+    assert applied == ["reader2", "reader1"]
+
+
+def test_capture_orientation_uses_and_updates_per_book_marker(tmp_path: Path, monkeypatch) -> None:
+    from abr.capture_ocr import OrientationDetectionError
+    from abr.preprocessing.processor import PreprocessorConfig
+
+    store = runtime_module.BookStore(tmp_path / "library")
+    store.ensure_book("BOOK1")
+    results = iter(
+        (
+            {"rotation_deg": 180, "reason": "three lines"},
+            OrientationDetectionError("nur eine Textzeile"),
+        )
+    )
+
+    def fake_detect(case_dir, *, language, preprocess_config):
+        del case_dir, language, preprocess_config
+        result = next(results)
+        if isinstance(result, BaseException):
+            raise result
+        return result
+
+    monkeypatch.setattr(runtime_module, "_detect_capture_orientation", fake_detect)
+
+    detected, detected_message = runtime_module._resolve_capture_orientation(
+        tmp_path / "case",
+        language="en",
+        preprocess_config=PreprocessorConfig(),
+        store=store,
+        tag_id="BOOK1",
+    )
+    fallback, fallback_message = runtime_module._resolve_capture_orientation(
+        tmp_path / "case",
+        language="en",
+        preprocess_config=PreprocessorConfig(),
+        store=store,
+        tag_id="BOOK1",
+    )
+
+    assert detected == "reader1"
+    assert "Merker auf reader1 aktualisiert" in detected_message
+    assert store.load_page_orientation("BOOK1") == "reader1"
+    assert fallback == "reader1"
+    assert "gespeicherter Merker reader1" in fallback_message
 
 
 def test_camera_assignment_log_data_follows_orientation_swap() -> None:

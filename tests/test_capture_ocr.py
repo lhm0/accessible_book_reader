@@ -4,7 +4,7 @@ from pathlib import Path
 import cv2
 import numpy as np
 
-from abr.capture_ocr import run_capture_ocr
+from abr.capture_ocr import detect_page_orientation_from_text_lines, run_capture_ocr
 from abr.models import OCRLine
 
 
@@ -12,6 +12,71 @@ def _write_test_image(path: Path) -> None:
     image = np.full((24, 32, 3), 180, dtype=np.uint8)
     ok = cv2.imwrite(str(path), image)
     assert ok
+
+
+def test_textline_orientation_uses_three_lines_and_rotates_on_confident_vote() -> None:
+    image = np.full((600, 900, 3), 255, dtype=np.uint8)
+    for y in (120, 260, 400):
+        cv2.putText(image, "Eine ausreichend lange Textzeile", (80, y), cv2.FONT_HERSHEY_SIMPLEX, 1.1, (0, 0, 0), 2)
+
+    class FakeBackend:
+        def detect_text_line_crops(self, image, *, count: int, language: str):
+            return [image] * count, [(0, index, 10, 1) for index in range(count)]
+
+        def classify_text_orientation(self, images, language: str = "de"):
+            assert language == "de"
+            assert len(images) == 3
+            return [("180", 0.98), ("180", 0.96), ("0", 0.81)]
+
+    result = detect_page_orientation_from_text_lines(image, FakeBackend())
+
+    assert result["rotation_deg"] == 180
+    assert len(result["line_boxes"]) == 3
+    assert "votes=0:0.810,180:1.940" in result["reason"]
+
+
+def test_textline_orientation_accepts_weighted_real_pi_vote() -> None:
+    image = np.full((600, 900, 3), 255, dtype=np.uint8)
+    for y in (120, 260, 400):
+        cv2.putText(image, "Eine ausreichend lange Textzeile", (80, y), cv2.FONT_HERSHEY_SIMPLEX, 1.1, (0, 0, 0), 2)
+
+    class FakeBackend:
+        def detect_text_line_crops(self, image, *, count: int, language: str):
+            return [image] * count, [(0, index, 10, 1) for index in range(count)]
+
+        def classify_text_orientation(self, images, language: str = "en"):
+            assert len(images) == 3
+            return [
+                ("180", 0.5964645147323608),
+                ("180", 0.9839293956756592),
+                ("0", 0.5595273375511169),
+            ]
+
+    result = detect_page_orientation_from_text_lines(image, FakeBackend(), language="en")
+
+    assert result["rotation_deg"] == 180
+    assert "accepted=3/3" in result["reason"]
+    assert "votes=0:0.560,180:1.580" in result["reason"]
+
+
+def test_textline_orientation_rejects_missing_lines_instead_of_guessing_zero() -> None:
+    image = np.full((200, 300, 3), 255, dtype=np.uint8)
+
+    class FakeBackend:
+        def detect_text_line_crops(self, image, *, count: int, language: str):
+            return [], []
+
+        def classify_text_orientation(self, images, language: str = "de"):
+            del language
+            assert images == []
+            return []
+
+    try:
+        detect_page_orientation_from_text_lines(image, FakeBackend())
+    except RuntimeError as exc:
+        assert "nur 0 von 3 Textzeilen" in str(exc)
+    else:
+        raise AssertionError("Expected missing orientation lines to abort")
 
 
 def test_run_capture_ocr_writes_left_before_processing_right(tmp_path: Path, monkeypatch) -> None:

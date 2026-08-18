@@ -4,6 +4,9 @@ from collections.abc import Iterable, Mapping
 from dataclasses import asdict, is_dataclass
 import logging
 
+import cv2
+import numpy as np
+
 from abr.models import OCRLine
 from abr.ocr.base import OCRBackend
 
@@ -116,6 +119,84 @@ class RapidOCRBackend(OCRBackend):
             line.metadata["ocr_language"] = normalized_language
             line.metadata["ocr_model_profile"] = model_profile
         return lines
+
+    def classify_text_orientation(
+        self,
+        images: list[object],
+        language: str = "de",
+    ) -> list[tuple[str, float]]:
+        """Classify cropped text lines as upright (0) or upside down (180)."""
+        engine = self._get_engine(language.strip().lower())
+        classifications: list[tuple[str, float]] = []
+        for image in images:
+            result = engine(image, use_det=False, use_cls=True, use_rec=False)
+            output = self._normalize_output(result)
+            cls_res = getattr(output, "cls_res", None)
+            if cls_res is None and isinstance(output, dict):
+                cls_res = output.get("cls_res")
+            if not cls_res:
+                continue
+            label, confidence = cls_res[0]
+            normalized_label = str(label)
+            if normalized_label not in {"0", "180"}:
+                continue
+            classifications.append((normalized_label, float(confidence)))
+        return classifications
+
+    def detect_text_line_crops(
+        self,
+        image,
+        *,
+        count: int = 3,
+        language: str = "de",
+    ) -> tuple[list[object], list[tuple[int, int, int, int]]]:
+        """Detect and tightly crop long text lines without recognizing them."""
+        engine = self._get_engine(language.strip().lower())
+        result = engine(image, use_det=True, use_cls=False, use_rec=False)
+        output = self._normalize_output(result)
+        mapping = _coerce_mapping(output)
+        boxes_value = getattr(output, "boxes", None)
+        scores_value = getattr(output, "scores", None)
+        if mapping is not None:
+            boxes_value = _first_present(mapping, ("boxes", "dt_boxes", "text_boxes"))
+            scores_value = _first_present(mapping, ("scores", "dt_scores", "box_scores"))
+        boxes = _as_sequence(boxes_value)
+        scores = _as_sequence(scores_value)
+        candidates: list[tuple[float, tuple[int, int, int, int]]] = []
+        image_height, image_width = image.shape[:2]
+        for index, points in enumerate(boxes):
+            points_array = np.asarray(points, dtype=np.float32)
+            if points_array.shape != (4, 2):
+                continue
+            x, y, width, height = cv2.boundingRect(points_array.astype(np.int32))
+            if width < image_width * 0.12 or width / max(1, height) < 3.0:
+                continue
+            confidence = float(scores[index]) if index < len(scores) else 1.0
+            candidates.append((confidence * width, (x, y, width, height)))
+
+        selected: list[tuple[int, int, int, int]] = []
+        min_vertical_distance = max(12, image_height // 20)
+        for _score, box in sorted(candidates, reverse=True):
+            center_y = box[1] + box[3] // 2
+            if any(abs(center_y - (other[1] + other[3] // 2)) < min_vertical_distance for other in selected):
+                continue
+            selected.append(box)
+            if len(selected) == count:
+                break
+        selected.sort(key=lambda box: box[1])
+
+        crops: list[object] = []
+        padded_boxes: list[tuple[int, int, int, int]] = []
+        for x, y, width, height in selected:
+            pad_x = max(2, width // 100)
+            pad_y = max(2, height // 5)
+            x0 = max(0, x - pad_x)
+            y0 = max(0, y - pad_y)
+            x1 = min(image_width, x + width + pad_x)
+            y1 = min(image_height, y + height + pad_y)
+            crops.append(image[y0:y1, x0:x1].copy())
+            padded_boxes.append((x0, y0, x1 - x0, y1 - y0))
+        return crops, padded_boxes
 
     def _normalize_output(self, result: object) -> object:
         if isinstance(result, tuple) and result:

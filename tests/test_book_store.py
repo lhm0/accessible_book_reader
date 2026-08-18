@@ -35,6 +35,24 @@ def test_book_store_ensures_layout_and_updates_book_record(tmp_path: Path) -> No
     assert updated.last_seen_at == "2026-07-02T10:05:00Z"
 
 
+def test_book_store_initializes_and_updates_page_orientation_marker(tmp_path: Path) -> None:
+    store = BookStore(tmp_path / "library")
+
+    store.ensure_book("BOOK-ORIENTATION")
+
+    assert store.load_page_orientation("BOOK-ORIENTATION") == "reader2"
+    initial = store.load_runtime_state("BOOK-ORIENTATION", "page_orientation.json")
+    assert initial is not None
+    assert initial["source"] == "default"
+
+    store.save_page_orientation("BOOK-ORIENTATION", "reader1")
+
+    assert store.load_page_orientation("BOOK-ORIENTATION") == "reader1"
+    updated = store.load_runtime_state("BOOK-ORIENTATION", "page_orientation.json")
+    assert updated is not None
+    assert updated["source"] == "ocr"
+
+
 def test_book_store_persists_language_and_rejects_different_profile(tmp_path: Path) -> None:
     store = BookStore(tmp_path / "library")
 

@@ -22,6 +22,13 @@ PAGE_SLOT_NAMES = {
     "page_2": "right",
 }
 ORIENTATION_SCORE_EPSILON = 0.02
+ORIENTATION_LINE_COUNT = 3
+ORIENTATION_CLASSIFIER_MIN_CONFIDENCE = 0.55
+ORIENTATION_VOTE_MARGIN = 0.35
+
+
+class OrientationDetectionError(RuntimeError):
+    """Raised when page text does not support a reliable 0/180 decision."""
 
 
 @dataclass(slots=True)
@@ -373,6 +380,70 @@ def _run_capture_ocr_page(
 
 def _avg_confidence(lines: list[OCRLine]) -> float:
     return sum(line.confidence for line in lines) / max(1, len(lines))
+
+
+def detect_page_orientation_from_text_lines(
+    image: ImageArray,
+    ocr_backend,
+    *,
+    language: str = "de",
+) -> dict[str, object]:
+    """Determine 0/180 page orientation from three inexpensive line crops."""
+    started = time.monotonic()
+    line_images, line_boxes = ocr_backend.detect_text_line_crops(
+        image,
+        count=ORIENTATION_LINE_COUNT,
+        language=language,
+    )
+    selection_sec = time.monotonic() - started
+
+    classifier_started = time.monotonic()
+    classifications = ocr_backend.classify_text_orientation(line_images, language=language)
+    classifier_sec = time.monotonic() - classifier_started
+
+    accepted = [
+        (label, confidence)
+        for label, confidence in classifications
+        if confidence >= ORIENTATION_CLASSIFIER_MIN_CONFIDENCE
+    ]
+    if len(line_images) < ORIENTATION_LINE_COUNT:
+        raise OrientationDetectionError(
+            "OCR-Orientierung nicht bestimmbar: "
+            f"nur {len(line_images)} von {ORIENTATION_LINE_COUNT} Textzeilen gefunden."
+        )
+    if len(accepted) < 2:
+        raise OrientationDetectionError(
+            "OCR-Orientierung nicht bestimmbar: "
+            f"nur {len(accepted)} verlaessliche Klassifikationen erhalten."
+        )
+    vote_0 = sum(confidence for label, confidence in accepted if label == "0")
+    vote_180 = sum(confidence for label, confidence in accepted if label == "180")
+    if vote_180 > vote_0 + ORIENTATION_VOTE_MARGIN:
+        rotation_deg = 180
+    elif vote_0 > vote_180 + ORIENTATION_VOTE_MARGIN:
+        rotation_deg = 0
+    else:
+        raise OrientationDetectionError(
+            "OCR-Orientierung nicht eindeutig: "
+            f"votes=0:{vote_0:.3f},180:{vote_180:.3f}, "
+            f"erforderlicher Vorsprung={ORIENTATION_VOTE_MARGIN:.3f}."
+        )
+    reason = (
+        f"textline-classifier boxes={line_boxes}, results={classifications}, "
+        f"accepted={len(accepted)}/{len(classifications)}, votes=0:{vote_0:.3f},"
+        f"180:{vote_180:.3f}, margin={ORIENTATION_VOTE_MARGIN:.3f}"
+    )
+    return {
+        "rotation_deg": rotation_deg,
+        "reason": reason,
+        "line_boxes": line_boxes,
+        "classifications": classifications,
+        "timings": {
+            "orientation_line_selection_sec": selection_sec,
+            "orientation_classifier_sec": classifier_sec,
+            "orientation_sec": selection_sec + classifier_sec,
+        },
+    }
 
 
 _VALID_WORD = re.compile(r"[A-Za-zÄÖÜäöüß]{2,}")

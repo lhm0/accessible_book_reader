@@ -446,7 +446,17 @@ def _select_orientation_line_images(
     """Find likely long text rows using a cheap horizontal ink projection."""
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
     height, width = gray.shape[:2]
-    inverted = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)[1]
+    # Local thresholding is essential here: the glass platen, daylight and
+    # page curvature create gradients large enough for a global Otsu threshold
+    # to merge most of a page into one contour.
+    inverted = cv2.adaptiveThreshold(
+        gray,
+        255,
+        cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+        cv2.THRESH_BINARY_INV,
+        81,
+        15,
+    )
     kernel_width = max(15, width // 80)
     joined = cv2.morphologyEx(
         inverted,
@@ -457,7 +467,11 @@ def _select_orientation_line_images(
     candidates: list[tuple[float, tuple[int, int, int, int]]] = []
     for contour in contours:
         x, y, w, h = cv2.boundingRect(contour)
-        if w < width * 0.18 or h < max(8, height * 0.003) or h > height * 0.08:
+        if w < width * 0.18 or w > width * 0.72:
+            continue
+        if h < max(8, height * 0.003) or h > height * 0.05:
+            continue
+        if y <= height * 0.08 or y + h >= height * 0.92:
             continue
         aspect = w / max(1, h)
         if aspect < 3.0:

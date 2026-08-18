@@ -53,6 +53,26 @@ def test_textline_orientation_accepts_weighted_real_pi_vote() -> None:
     assert "votes=0:0.560,180:1.580" in result["reason"]
 
 
+def test_textline_orientation_finds_lines_across_strong_light_gradient() -> None:
+    height, width = 700, 1000
+    gradient = np.linspace(140, 245, width, dtype=np.uint8)
+    gray = np.tile(gradient, (height, 1))
+    image = cv2.cvtColor(gray, cv2.COLOR_GRAY2BGR)
+    for y in (180, 300, 420, 540):
+        for x, word_width in ((180, 90), (278, 105), (391, 80), (479, 120), (607, 95)):
+            cv2.rectangle(image, (x, y - 18), (x + word_width, y), (20, 20, 20), -1)
+
+    class FakeBackend:
+        def classify_text_orientation(self, images, language: str = "en"):
+            assert len(images) == 3
+            return [("0", 0.91), ("0", 0.88), ("0", 0.93)]
+
+    result = detect_page_orientation_from_text_lines(image, FakeBackend(), language="en")
+
+    assert result["rotation_deg"] == 0
+    assert len(result["line_boxes"]) == 3
+
+
 def test_textline_orientation_rejects_missing_lines_instead_of_guessing_zero() -> None:
     image = np.full((200, 300, 3), 255, dtype=np.uint8)
 

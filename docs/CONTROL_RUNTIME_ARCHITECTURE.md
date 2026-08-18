@@ -1,19 +1,20 @@
 # Control Runtime Architecture
 
-Stand: `2026-07-11`
+Last reviewed: `2026-07-11`
 
-## Ziel
+Deutsche Fassung: [Control-Runtime-Architektur](../docs_DE/CONTROL_RUNTIME_ARCHITECTURE.md)
 
-Dieses Dokument beschreibt die aktuell implementierte Laufzeitarchitektur des
-ABR-Geraets auf dem `Raspberry Pi 5`.
+## Purpose
 
-Die fachliche Buch-, Seiten- und spaetere Kapitel-/Summary-Logik ist separat in
-[docs/BOOK_RUNTIME_DATA_ARCHITECTURE.md](../docs/BOOK_RUNTIME_DATA_ARCHITECTURE.md)
-beschrieben.
+This document describes the currently implemented runtime architecture of the
+ABR device on the `Raspberry Pi 5`.
 
-## Implementierte Hauptkomponenten
+Book, page, section, and summary logic is documented separately in
+[BOOK_RUNTIME_DATA_ARCHITECTURE.md](BOOK_RUNTIME_DATA_ARCHITECTURE.md).
 
-Die Runtime besteht derzeit aus:
+## Main Components
+
+The runtime currently consists of:
 
 1. `FrontPanelMonitor`
 2. `Action Router`
@@ -21,26 +22,26 @@ Die Runtime besteht derzeit aus:
 4. `ForegroundJobManager`
 5. `PageIngestService`
 6. `PageAudioPlayer`
-7. `SystemAudio`-Worker
+7. `SystemAudio` worker
 8. `AudioVolumeController`
 
-## Kerngedanke
+## Core Design
 
-Die GPIO-Ueberwachung ist strikt von langen Jobs getrennt. Capture, OCR, TTS
-und Audioausgabe blockieren den Frontpanel-Pfad nicht.
+GPIO monitoring is strictly separated from long-running work. Capture, OCR,
+TTS, and audio playback do not block the front-panel path.
 
-Es gibt zwei parallel relevante Ebenen:
+Two state dimensions are relevant in parallel:
 
-- `Work State`
-- Audiozustand
+- work state
+- audio state
 
-Das ist bereits praktisch umgesetzt.
+This separation is implemented in the current runtime.
 
-## Tatsachlich verwendete Zustandsidee
+## Runtime States
 
 ### Work State
 
-Aktuell implementiert:
+Implemented states:
 
 - `idle`
 - `capture_ocr_running`
@@ -50,107 +51,103 @@ Aktuell implementiert:
 - `cancelling_work`
 - `error`
 
-Wichtig:
+The two summary states are implemented as foreground jobs. The front panel
+and audio-stop controls remain responsive while a summary job is running.
 
-- die beiden Summary-States sind jetzt als echte Foreground-Jobs verdrahtet
-- waehrend einer laufenden Zusammenfassung bleiben Frontpanel und Audiostopp
-  weiterhin reaktionsfaehig
+### Audio Layers
 
-### Audioebenen
-
-Es gibt zwei unterschiedliche Audiopfade:
+There are two distinct audio paths:
 
 - `SystemAudio`
-  - serielle Queue
-  - Warnhinweise sollen vollstaendig laufen
+  - serial queue
+  - warnings are intended to play in full
 - `PageAudioPlayer`
-  - fuer Seitenausgabe
-  - explizit abbrechbar
+  - used for page playback
+  - explicitly cancellable
 
-Diese Trennung ist absichtlich und fachlich wichtig.
+This separation is deliberate and significant to the application behavior.
 
-Beide Pfade teilen sich jedoch dieselbe lokale Playback-Implementierung in
-`abr/audio_playback.py` und denselben pro Prozess geltenden Playback-Lock. Auf
-dem Raspberry Pi wird `aplay` ohne explizites ALSA-`-D` gestartet. Die
-Maschinenkonfiguration muss deshalb `/etc/asound.conf` so definieren, dass das
-globale `default` als `plug`-PCM auf `hw:CARD=MAX98357A,DEV=0` zeigt. Der
-symbolische Kartenname ist absichtlich stabiler als `card 0`, `card 1` oder
-`card 2`; diese Nummern koennen sich durch HDMI- und Treiberreihenfolge
-aendern. Die `plug`-Konvertierung ist notwendig, weil der Hardwarepfad zwei
-Kanaele erwartet, die erzeugten WAV-Dateien aber mono sein koennen.
+Both paths use the same local playback implementation in
+`abr/audio_playback.py` and share the same process-wide playback lock. On the
+Raspberry Pi, `aplay` is started without an explicit ALSA `-D` argument. The
+machine must therefore define the global `default` device in
+`/etc/asound.conf` as a `plug` PCM targeting `hw:CARD=MAX98357A,DEV=0`. The
+symbolic card name is deliberately more stable than `card 0`, `card 1`, or
+`card 2`, whose numbers can change with HDMI and driver initialization order.
+The `plug` conversion is required because the hardware path expects two
+channels while generated WAV files may be mono.
 
-## Foreground-Job-Regel
+## Foreground Job Rule
 
-Aktuell gilt:
+The following rules apply:
 
-- genau ein foreground job gleichzeitig
-- derzeit produktiv nur der Lauf `capture -> Bildvorbereitung -> OCR ->
-  page-ingest`
-- Audio darf parallel dazu laufen
-- keine versteckte Job-Warteschlange
+- exactly one foreground job at a time
+- the production capture job follows
+  `capture -> image preparation -> OCR -> page ingest`
+- audio may run in parallel
+- there is no hidden job queue
 
-## Start-/Stop-Semantik
+## Start and Stop Semantics
 
 ### `Start / Stop / NFC`
 
-Bei `idle`:
+When `idle`:
 
-- NFC-Tag lesen
-- Buchkontext sicherstellen
-- `bing`
-- Heartbeat starten
-- den Lauf `capture -> Bildvorbereitung -> OCR -> page-ingest` starten
+- read the NFC tag
+- establish the book context
+- play `bing`
+- start the heartbeat
+- start `capture -> image preparation -> OCR -> page ingest`
 
-Bei laufendem foreground job:
+While a foreground job is running:
 
-- Abbruch anfordern
-- `abbruch`
+- request cancellation
+- play `abbruch`
 
-Bei laufender Seitenausgabe:
+During page playback:
 
-- Wiedergabe sofort stoppen
-- `abbruch`
+- stop playback immediately
+- play `abbruch`
 
-Bei reinem Heartbeat-Wartezustand:
+During a heartbeat-only waiting state:
 
-- Heartbeat stoppen
-- spaeter eintreffendes `page-ingest`-Ergebnis verwerfen
-- `abbruch`
+- stop the heartbeat
+- discard a later `page-ingest` result
+- play `abbruch`
 
 ## Heartbeat
 
-Der Start-Wartezustand wird durch einen separaten Heartbeat-Thread dargestellt.
+A separate heartbeat thread represents the start/wait state.
 
-Aktuelles Verhalten:
+Current behavior:
 
-- Standardintervall: `5s`
-- Signal: `bing`
-- endet bei:
-  - erster fertiger Seitenaudio
-  - Fehler
-  - Stop
-  - leerem `page-ingest`-Ergebnis
+- default interval: `5s`
+- signal: `bing`
+- stops when:
+  - the first page audio is ready
+  - an error occurs
+  - Stop is pressed
+  - page ingest returns an empty result
 
-Dieser Pfad ist inzwischen explizit abgesichert, damit es keine
-Endlosschleifen mehr gibt, wenn OCR/Ingress zwar formal erfolgreich waren,
-aber keine vorlesbaren Seiten entstanden sind. In diesem speziellen Fall
-wird `empty_page.wav` ausgegeben; andere Fehlerpfade bleiben unveraendert
-bei `fehler.wav`.
+This path explicitly prevents an endless heartbeat when OCR and ingest are
+formally successful but produce no speakable pages. In this case,
+`empty_page.wav` is played. Other error paths continue to use `fehler.wav`.
 
-## SystemAudio
+## System Audio
 
-Die vorproduzierten Systemhinweise liegen sprachweise unter
-`system_audio/messages/de/` und `system_audio/messages/en/`. Beim Start liest
-`control_panel_service.py` das aktive Sprachprofil und uebergibt dem Runtime-
-Controller genau den zugehoerigen Ordner. Ein Wechsel mit `abr-language` wird
-daher nach dem Neustart von `abr-control-panel.service` wirksam.
+Pre-generated system prompts are stored by language under
+`system_audio/messages/de/` and `system_audio/messages/en/`. At startup,
+`control_panel_service.py` reads the active language profile and gives the
+runtime controller only the corresponding directory. A language change with
+`abr-language` therefore takes effect after restarting
+`abr-control-panel.service`.
 
-Die logischen Dateinamen sind in beiden Sprachordnern identisch. Eine neue
-Systemmeldung muss immer fuer beide Sprachen bereitgestellt werden. Ein
-fehlender Hinweis wird nicht aus einem anderen Sprachordner ersetzt, sondern
-als Laufzeitfehler mit dem vollstaendig aufgeloesten Pfad protokolliert.
+Logical filenames are identical in both language directories. Every new
+system prompt must be provided in both languages. A missing prompt is not
+replaced from another language directory; it is logged as a runtime error
+with the fully resolved path.
 
-Aufgaben:
+Prompts include:
 
 - `bing`
 - `neues_buch`
@@ -163,169 +160,156 @@ Aufgaben:
 - `buch_zusammenfassen`
 - `keine_zusammenfassung`
 
-Wichtige Regel:
+These prompts use their own queue and should not be interrupted by page
+playback.
 
-- diese Hinweise laufen ueber eine eigene Queue
-- sie sollen nicht durch die Seitenausgabe zerhackt werden
+## Page Audio
 
-## Seitenaudio
+`PageAudioPlayer`:
 
-Der `PageAudioPlayer`:
+- ignores pages with empty `speak_text`
+- plays available pages in sequence
+- starts only after the complete left-page audio is available
+- processes image preparation, OCR, `PageIngestor`, and TTS for the right page
+  while the left page is playing
+- can be stopped immediately with `Start / Stop`
 
-- ignoriert leere `speak_text`-Seiten
-- spielt vorhandene Seiten in Reihenfolge ab
-- startet erst, nachdem die linke Seite komplett als Audio vorliegt
-- waehrend die linke Seite laeuft, werden Bildvorbereitung, OCR,
-  `PageIngestor` und TTS fuer die rechte Seite nachgezogen
-- ist per `Start / Stop` sofort abbrechbar
+To reduce waiting time, both pages are still photographed first. Only then
+are they processed left before right. This reduces the time from `Start` to
+first audio without requiring the book to remain on the scanner.
 
-Wichtig fuer die Wartezeit:
+Chapter announcements:
 
-- beide Seiten werden weiterhin zuerst komplett aufgenommen
-- erst danach wird links vor rechts verarbeitet
-- das verkuerzt die Zeit von `Start` bis zur ersten Audioausgabe, ohne dass das
-  Buch noch auf dem Scanner liegen bleiben muss
+- are handled as SSML at runtime for `google` and `say`
+- have a `1350ms` pause before `Chapter ...`
+- have another `1350ms` pause afterward
+- short, fully uppercase OCR headings are converted to readable case, treated
+  as separate paragraphs, and followed by the same `1350ms` pause
 
-Kapitelansagen:
+## Volume
 
-- werden zur Laufzeit fuer `google` und `say` als SSML behandelt
-- vor `Kapitel ...` liegt eine Pause von `1350ms`
-- nach `Kapitel ...` ebenfalls `1350ms`
-- kurze, vollstaendig grossgeschriebene OCR-Ueberschriften werden fuer die
-  Ausgabe in lesbare Gross-/Kleinschreibung umgewandelt, als eigener Absatz
-  behandelt und erhalten danach ebenfalls `1350ms` Pause
+`AudioVolumeController`:
 
-## Lautstaerke
+- currently uses `10` levels
+- covers the range `20% .. 100%`
+- prefers software volume control when no usable ALSA mixer is available
+- also affects active playback
 
-Der `AudioVolumeController`:
+Volume has a thread-safe target value. An EC11 step changes it directly from
+the GPIO edge callback through `request_delta()`; this path deliberately does
+not start a mixer subprocess. The regular encoder event processed later
+synchronizes the ALSA mixer when necessary and writes the log entry.
 
-- arbeitet aktuell mit `10` Stufen
-- Bereich `20% .. 100%`
-- bevorzugt Software-Regelung, wenn kein brauchbarer ALSA-Mixer verfuegbar ist
-- wirkt auch waehrend aktiver Wiedergabe
+Both `PageAudioPlayer` and `SystemAudio` pass
+`AudioVolumeController.current_percent` to local WAV playback as a
+`volume_provider`. The `aplay` streaming path reads this value again for each
+PCM block. A volume change therefore also takes effect during a synchronous
+`bing.wav`, even though the main runtime thread is blocked until the sound
+finishes.
 
-Die Lautstaerke besitzt einen threadsicheren Sollwert. Ein EC11-Schritt
-veraendert ihn bereits im GPIO-Flankencallback ueber `request_delta()`; dieser
-Pfad startet bewusst keinen Mixer-Subprozess. Der spaeter verarbeitete normale
-Encoder-Event synchronisiert bei Bedarf den ALSA-Mixer und schreibt das Log.
+Dynamically scaled WAV files are streamed to `aplay` as PCM and require
+headroom for short scheduler delays on the Pi. The permitted PCM lead is
+`250ms`, with a `300ms` ALSA buffer and a `50ms` period. The previous `100ms`
+headroom could cause a short buffer underrun and audible interruption in the
+roughly four-second `bing.wav` on a busy system. The larger headroom keeps
+playback continuous. Every scaled PCM block is also flushed to the pipe
+immediately instead of accumulating multiple blocks in Python's write buffer,
+so volume changes remain perceptible with well under one second of latency.
 
-Sowohl `PageAudioPlayer` als auch `SystemAudio` uebergeben
-`AudioVolumeController.current_percent` als `volume_provider` an die lokale
-WAV-Wiedergabe. Der `aplay`-Streamingpfad fragt diesen Wert fuer jeden
-PCM-Block erneut ab. Damit wirkt eine Drehung auch waehrend eines synchronen
-`bing.wav`, obwohl der Runtime-Hauptthread bis zum Tonende blockiert ist.
+## Usage Statistics
 
-Da dynamisch regelbare WAVs als PCM-Strom an `aplay` gehen, braucht dieser
-Pfad Reserve gegen kurze Scheduler-Verzoegerungen auf dem Pi. Der erlaubte
-PCM-Vorlauf betraegt `250ms`, der ALSA-Puffer `300ms` bei einer Periode von
-`50ms`. Die zuvor verwendeten `100ms` Reserve konnten bei einem beschaeftigten
-System einen kurzen Buffer-Underrun und damit eine hoerbare Unterbrechung in
-der etwa vier Sekunden langen `bing.wav` verursachen. Die groessere Reserve
-haelt die Wiedergabe zusammenhaengend. Jeder skalierte PCM-Block wird zudem
-sofort in die Pipe geflusht, statt mehrere Bloecke im Python-Schreibpuffer zu
-sammeln; Lautstaerkeaenderungen bleiben mit deutlich unter einer Sekunde
-Reaktionszeit wahrnehmbar direkt.
+The production `control_panel_service` creates a `UsageStatisticsStore` below
+the configured `library-root` and passes it to `RuntimeController`.
 
-## Nutzerstatistik
+The runtime records per book:
 
-Der produktive `control_panel_service` erzeugt einen
-`UsageStatisticsStore` unterhalb des konfigurierten `library-root` und reicht
-ihn an den `RuntimeController` weiter.
+- successfully ingested pages; `scan_id` plus `page_id` prevent double
+  counting during incremental ingest of the same page
+- actual duration of each page and summary audio around the blocking playback
+  call, including playback stopped early
+- starts of the chapter/latest-pages summary
+- starts of the story-so-far summary
 
-Die Runtime erfasst buchbezogen:
+System audio and signal sounds use a separate playback path and do not count
+as reading time. Statistics errors are logged but do not propagate into the
+device workflow.
 
-- erfolgreich ingestierte Seiten; `scan_id` plus `page_id` verhindern eine
-  Doppelzaehlung durch den inkrementellen Ingest derselben Seite
-- die reale Laufzeit jedes Seiten- und Zusammenfassungsaudios um den
-  blockierenden Playback-Aufruf, auch bei einem vorzeitigen Abbruch
-- den Start der Kapitel-/Letzte-Seiten-Zusammenfassung
-- den Start von `Was bisher geschah`
+Persistent statistics are written atomically and protected against parallel
+access from the runtime, audio thread, and report process. Reporting periods
+use `Europe/Berlin` and run from `04:00` to `04:00`. Delivery, archiving, and
+systemd operation are described in
+[USAGE_STATISTICS.md](USAGE_STATISTICS.md).
 
-Systemaudio und Signalklaenge laufen ueber einen getrennten Wiedergabepfad
-und werden nicht als Vorlesezeit erfasst. Statistikfehler werden geloggt, aber
-nicht in den eigentlichen Geraeteablauf weitergereicht.
+## Book Deletion Dialog
 
-Die persistente Ablage ist atomar und gegen parallele Zugriffe aus Runtime,
-Audio-Thread und Report-Prozess gesperrt. Perioden folgen `Europe/Berlin` und
-laufen von `04:00` bis `04:00`. Versand, Archivierung und systemd-Betrieb sind
-in [USAGE_STATISTICS.md](../docs/USAGE_STATISTICS.md)
-beschrieben.
+Implemented in the runtime controller:
 
-## Buch-Loeschdialog
+1. Press the three-button combination.
+2. Read NFC.
+3. If no tag is detected:
+   - play `buch_nicht_erkannt`
+4. If a tag is detected:
+   - play `buch_loeschen`
+   - confirm only with the `EC11` button
+   - cancel with a function button
+5. Result:
+   - `abbruch` or `buch_geloescht`
 
-Implementiert im Runtime-Controller:
+## Implemented Scope
 
-1. Dreifachtaste
-2. NFC lesen
-3. wenn kein Tag:
-   - `buch_nicht_erkannt`
-4. wenn Tag vorhanden:
-   - `buch_loeschen`
-   - Bestaetigung nur per `EC11`-Taster
-   - Abbruch per Funktionstaste
-5. Ergebnis:
-   - `abbruch` oder `buch_geloescht`
+The runtime coordinates:
 
-## Implementierte Grenzen
-
-Die Runtime koordiniert bereits:
-
-- Frontpanel
+- front panel
 - NFC
-- Capture/OCR
-- Heartbeat
-- Page-Ingest
-- Seitenausgabe
-- Lautstaerke
-- Buch-Loeschen
+- capture and OCR
+- heartbeat
+- page ingest
+- page playback
+- volume
+- book deletion
+- section assembly after every successful page ingest
+- immediate summaries for newly completed sections through `SummaryManager`
+- button jobs for the latest section summary and story-so-far summary
+- a temporary current recap combining the latest persistent section summary
+  with the still-open section text
 
-Die Runtime koordiniert jetzt zusaetzlich:
+Important behavior of the summary buttons:
 
-- Abschnittsbildung nach jedem erfolgreichen `page-ingest`
-- sofortige Abschnittszusammenfassung fuer neue Abschnitte ueber
-  `SummaryManager`
-- Tastenjobs fuer letzte Abschnittszusammenfassung und "Was bisher geschah"
-- temporaere aktuelle Rueckschau aus der letzten persistenten
-  Abschnittszusammenfassung und dem noch offenen Abschnittstext
+- chapter and book summaries start with a preceding system prompt
+- the same `bing` heartbeat used by the Start button then runs
+- before playing a chapter/latest-pages summary, `ChapterAssembler` completes
+  any newly available sections and reads text from its persistent open
+  boundary
+- if open text exists, `SummaryManager.summarize_chapter_progress()` combines
+  it with the latest section summary into an in-memory-only `SummaryRecord`;
+  before the first section, open text is the only source
+- without open text, the existing path to the latest persistent section
+  summary remains unchanged
+- the heartbeat stops only after summary text has been enqueued for audio
+- `keine_zusammenfassung` is played only when there is neither a completed
+  section nor open text
 
-Wichtig fuer die Summary-Tasten:
-
-- Kapitel- und Buchzusammenfassung starten mit einer vorgelagerten
-  Systemnachricht
-- danach laeuft derselbe `bing`-Heartbeat wie beim Start-Knopf
-- vor der Ausgabe der Kapitel-/Letzte-Seiten-Zusammenfassung zieht der
-  `ChapterAssembler` fertige Abschnitte nach und liest danach den Text ab
-  seiner persistenten offenen Grenze
-- ist offener Text vorhanden, erzeugt `SummaryManager.summarize_chapter_progress()`
-  daraus und aus der letzten Abschnittszusammenfassung einen nur im Speicher
-  gehaltenen `SummaryRecord`; vor dem ersten Abschnitt dient nur der offene
-  Text als Quelle
-- ohne offenen Text bleibt der bisherige Pfad zur letzten persistenten
-  Abschnittszusammenfassung unveraendert
-- erst wenn der Summary-Text als Audio enqueued ist, endet der Heartbeat
-- nur wenn weder ein abgeschlossener Abschnitt noch offener Text vorhanden
-  ist, spielt die Runtime `keine_zusammenfassung`
-
-Der temporaere Pfad ist im Log explizit erkennbar:
+The temporary path is explicitly visible in the log:
 
 ```text
 Temporaere Kapitelzusammenfassung wird aus dem letzten Abschnitt und N Zeichen offenem Text erzeugt.
 Temporaere Kapitelzusammenfassung bereit; sie wird nicht gespeichert.
 ```
 
-Vor dem ersten abgeschlossenen Abschnitt nennt die erste Meldung stattdessen,
-dass nur offener Text als Quelle dient. Das Audiolabel beginnt mit
-`kapitel-zusammenfassung-temporaer`; persistente Kapitelzusammenfassungen
-behalten ihre bisherigen Labels.
+Before the first completed section, the first message states that only open
+text is used. The audio label starts with
+`kapitel-zusammenfassung-temporaer`; persistent section summaries keep their
+existing labels.
 
-## Noch offene Schritte
+## Remaining Work
 
-1. echtes Laufzeitverhalten der Summary-Laengensteuerung auf dem Pi verifizieren
-2. bei Bedarf explizite `chapter_completed`-/`summary_completed`-Events ableiten
-3. weitere Fehlerfaelle fuer Google-Cloud-ADC, Projektkonfiguration oder
-   Netzwerk noch feiner rueckmelden
+1. Verify summary length control during real operation on the Pi.
+2. Derive explicit `chapter_completed` or `summary_completed` events if
+   needed.
+3. Improve reporting for Google Cloud ADC, project configuration, and network
+   errors where useful.
 
-## Relevante Dateien
+## Relevant Files
 
 - [abr/control/runtime.py](../abr/control/runtime.py)
 - [abr/control/frontpanel.py](../abr/control/frontpanel.py)
@@ -333,176 +317,164 @@ behalten ihre bisherigen Labels.
 - [abr/book/page_ingestor.py](../abr/book/page_ingestor.py)
 - [hardware/control_panel_service.py](../hardware/control_panel_service.py)
 
-## Asynchrone NFC-Abfrage und Buchorientierung
+## Asynchronous NFC Query and Book Orientation
 
-Der Startpfad verwendet fuer das PN5180-Gateway den zweistufigen Ablauf:
+For the PN5180 gateway, the Start path uses a two-stage sequence:
 
-1. direkt beim Druecken von `Start / Stop / NFC`: `STATUS_START`
-2. Aufnahme beider Kamerabilder
-3. unmittelbar vor Bildvorbereitung/OCR: `STATUS_FETCH`
+1. Immediately after pressing `Start / Stop / NFC`: `STATUS_START`
+2. Capture both camera images.
+3. Immediately before image preparation and OCR: `STATUS_FETCH`
 
-Die Auswahl danach ist:
+The subsequent selection logic is:
 
-- `ISO14443A` ist der fuehrende Buchschluessel
-- Reader 2 mit ISO14443A wird als Orientierung 1 gemeldet
-- Reader 1 mit ISO14443A wird als Orientierung 2 gemeldet
-- bei Orientierung 1 bleibt die aufgenommene Links-/Rechts-Zuordnung erhalten
-- bei Orientierung 2 werden die beiden Seitendateien unmittelbar nach
-  `STATUS_FETCH` und vor der Bildvorbereitung vertauscht
-- danach wird `case/right.jpg` direkt um 180 Grad gedreht; dadurch ist die
-  Korrektur auch im Camera-Testserver unter `entzerrte Bilder` sichtbar
-- die OCR-Vorverarbeitung fuehrt keine weitere Seitendrehung aus
-- nur ISO15693: Zuordnung ueber vorhandene
-  `iso15693_tag_ids.txt`; Standardorientierung wie Reader 2
+- `ISO14443A` is the primary book key.
+- Reader 2 detecting ISO14443A reports orientation 1.
+- Reader 1 detecting ISO14443A reports orientation 2.
+- With orientation 1, the captured left/right assignment remains unchanged.
+- With orientation 2, the two page files are swapped immediately after
+  `STATUS_FETCH` and before image preparation.
+- `case/right.jpg` is then rotated by 180 degrees. This makes the correction
+  visible under `rectified images` in the camera test server as well.
+- OCR preprocessing performs no further page rotation.
+- If only ISO15693 is available, the book is resolved through existing
+  `iso15693_tag_ids.txt` files and uses the Reader 2 orientation by default.
 
-Die ISO15693-Only-Orientierung ist mit
-`--iso15693-only-orientation reader1|reader2` umstellbar.
+The ISO15693-only orientation can be changed with
+`--iso15693-only-orientation reader1|reader2`.
 
-## Gekapselter Neural2-Testpfad
+## Isolated Neural2 Test Path
 
-Die produktive Seitenausgabe bleibt:
+Production page playback remains:
 
-- Backendname `google`
-- Klasse `GoogleCloudTTSBackend`
-- Stimme `de-DE-Standard-H`
-- Standard ohne zusaetzliche CLI-Option
+- backend name `google`
+- class `GoogleCloudTTSBackend`
+- voice `de-DE-Standard-H`
+- the default without an additional CLI option
 
-Der Opt-in-Pfad `google-standard-enhanced` verwendet ebenfalls
-`GoogleCloudTTSBackend` und `de-DE-Standard-H`. Nur die Runtime-Aufbereitung
-unterscheidet sich: Sie strukturiert Absaetze und Saetze mit SSML, behaelt
-die Kapitelpause und hebt kurze Ueberschriften moderat hervor. Bei einem
-Fragesatz wird das vollstaendige letzte Wort mit
-`<prosody pitch="+3st">` markiert.
-Nach jedem Satz innerhalb eines Absatzes wird
-`<break time="900ms"/>` eingefuegt. Der letzte Satz eines Absatzes erhaelt
-stattdessen `<break time="2000ms"/>`; beide Pausen werden nicht addiert.
-Neben den Leerzeilen aus dem Page-Ingest erkennt der Renderer als Fallback
-auch einfache Zeilenumbrueche nach `.` oder `?`; schliessende
-Anfuehrungszeichen zwischen Satzzeichen und Umbruch sind erlaubt.
-Ist der vorherige Absatz ein vollstaendig in `"..."`, `»...«` oder `„...“`
-eingerahmter Dialogsatz, wird die folgende Absatzgrenze ausnahmsweise wie eine
-Satzgrenze behandelt und erhaelt nur `900ms` Pause.
-Eine Validierung stellt sicher, dass die Wortfolge nicht veraendert wird;
-bei einem Fehler wird die bisherige SSML-Aufbereitung benutzt. Der Default
-`google` bleibt unangetastet.
+The opt-in `google-standard-enhanced` path also uses
+`GoogleCloudTTSBackend` and `de-DE-Standard-H`. Only runtime preparation
+differs: it structures paragraphs and sentences using SSML, retains the
+chapter pause, and moderately emphasizes short headings. In a question, the
+complete final word is marked with `<prosody pitch="+3st">`.
 
-Der Neural2-Versuch ist davon getrennt:
+After each sentence within a paragraph, it inserts
+`<break time="900ms"/>`. The final sentence of a paragraph instead receives
+`<break time="2000ms"/>`; the two pauses are not added together. In addition
+to blank lines produced during page ingest, the renderer recognizes single
+line breaks after `.` or `?` as a fallback. Closing quotation marks may occur
+between the punctuation and line break. If the preceding paragraph is a line
+of dialogue fully enclosed in `"..."`, `»...«`, or `„...“`, the following
+paragraph boundary is treated as a sentence boundary and receives only a
+`900ms` pause.
 
-- Backendname `google-neural2`
-- Klasse `GoogleNeural2TTSBackend`
-- Defaultstimme `de-DE-Neural2-H`
-- Aktivierung nur mit
-  `--page-tts-backend google-neural2`
+A validation step ensures that word order is unchanged. If validation fails,
+the previous SSML preparation is used. The default `google` path remains
+untouched.
 
-Beide Pfade behalten die vorhandenen SSML-Kapitelpausen. Durch Weglassen des
-Schalters oder `--page-tts-backend google` wird ohne Migration oder
-Datenanpassung auf den bisherigen Pfad zurueckgeschaltet.
+The Neural2 experiment is separate:
 
-Zusaetzlich existiert ein dritter, ebenfalls gekapselter Versuchspfad:
+- backend name `google-neural2`
+- class `GoogleNeural2TTSBackend`
+- default voice `de-DE-Neural2-H`
+- enabled only with `--page-tts-backend google-neural2`
 
-- Backendname `google-gemini-flash`
-- Klasse `GoogleGeminiFlashTTSBackend`
-- Modell `gemini-2.5-flash-tts`
-- Defaultstimme `Charon`
-- getrennte Felder fuer gesprochenen Text und Hoerbuch-Stilprompt
-- Aktivierung nur mit
-  `--page-tts-backend google-gemini-flash`
+Both paths retain the existing SSML chapter pauses. Omitting the option or
+using `--page-tts-backend google` switches back to the previous path without
+migration or data changes.
 
-Gemini TTS erhaelt Klartext statt SSML. Der vorhandene Geschwindigkeitswert
-wird als natuerlichsprachliche Tempovorgabe an den Prompt angehaengt. Text und
-Prompt werden getrennt gegen das jeweilige `4000`-Byte-Limit geprueft.
+A third, separately isolated experimental path also exists:
 
-Auch von diesem Pfad fuehrt `--page-tts-backend google` beziehungsweise das
-Weglassen der Option direkt und ohne Datenmigration zu
-`de-DE-Standard-H` zurueck.
+- backend name `google-gemini-flash`
+- class `GoogleGeminiFlashTTSBackend`
+- model `gemini-2.5-flash-tts`
+- default voice `Charon`
+- separate fields for spoken text and the audiobook-style prompt
+- enabled only with `--page-tts-backend google-gemini-flash`
 
-## Schutz gegen falsche Seitenfolge
+Gemini TTS receives plain text instead of SSML. The configured speed is added
+to the prompt as a natural-language pacing instruction. Text and prompt are
+checked separately against their respective `4000`-byte limits.
 
-`RuntimeController` fuehrt pro Buch einen fluechtigen Zustand aus:
+From this path as well, `--page-tts-backend google` or omitting the option
+returns directly to `de-DE-Standard-H` without a data migration.
 
-- Seitenzahlen des zuletzt zur Wiedergabe angenommenen Scans
-- Scan-ID, damit linkes und rechtes inkrementelles Ingest-Ergebnis als eine
-  Doppelseite behandelt werden
-- Bestaetigungsmerker fuer Rueckwaertsblaettern und Seitenwiederholung
-- unterdrueckte Scan-IDs, damit nach einer Warnung auch das zweite
-  Teilergebnis desselben Scans nicht ausgegeben wird
+## Protection Against Incorrect Page Order
 
-Bei einer Ueberschneidung mit der letzten Doppelseite wird
-`repeat_page.wav`, bei einer kleineren minimalen Seitenzahl
-`wrong_direction.wav` abgespielt. Die Seitenausgabe wird jeweils nicht
-eingeplant. Ein neuer Scan verbraucht den passenden Bestaetigungsmerker und
-darf die beanstandete Pruefung einmal passieren. Der
-Rueckwaerts-Bestaetigungsmerker garantiert die Ausgabe des neuen Scans.
-Scans ohne Seitenzahl bleiben von den Pruefungen ausgenommen.
+`RuntimeController` maintains volatile per-book state containing:
 
-Anders als allgemeine Systemhinweise werden diese beiden Warnungen synchron
-im Page-Ingest-Callback abgespielt. Damit ist die Warnung abgeschlossen,
-bevor das Ergebnis verworfen wird. Die Runtime protokolliert
-`Seitenfolge-Hinweis startet` und `Seitenfolge-Hinweis abgeschlossen`; ein
-Wiedergabefehler nennt stattdessen den fehlenden oder unlesbaren Audiopfad.
+- page numbers from the most recently accepted scan
+- scan ID, so the incremental left and right ingest results are treated as
+  one spread
+- confirmation flags for backward page turns and page repetition
+- suppressed scan IDs, so the second partial result from a warned scan is not
+  played either
 
-Zwischen OCR links und dem Start der rechten Bildverarbeitung liegt im
-inkrementellen Pfad eine Synchronisationsstelle: `PageIngestService.submit`
-liefert ein Completion-Event, auf das der Capture-Runner wartet. Eine
-Seitenfolge-Warnung ruft `ForegroundJobManager.cancel_current_job()` auf.
-Der wartende Runner erkennt das Cancel-Event, wirft
-`ForegroundJobCancelled` und startet OCR rechts nicht mehr. Das
-`CANCELLED`-Jobereignis setzt die Runtime anschliessend auf `IDLE`.
+If the new scan overlaps the previous spread, `repeat_page.wav` is played. If
+its minimum page number is lower, `wrong_direction.wav` is played. In either
+case, the pages are not queued for playback. A new scan consumes the matching
+confirmation flag and is allowed to pass the rejected check once. The
+backward-confirmation flag guarantees playback of the new scan. Scans without
+page numbers are exempt from these checks.
 
-## Segmentierung langer Summary-Audios
+Unlike general system prompts, these two warnings are played synchronously in
+the page-ingest callback. The warning therefore finishes before the result is
+discarded. The runtime logs `Seitenfolge-Hinweis startet` and
+`Seitenfolge-Hinweis abgeschlossen`; a playback error instead identifies the
+missing or unreadable audio path.
 
-`PageAudioPlayer.enqueue_text()` prueft fuer die Google-Pfade die Bytegroesse
-der tatsaechlich gerenderten Eingabe, also bei
-`google-standard-enhanced` einschliesslich SSML. Zusammenfassungen werden
-bereits oberhalb von `900` Byte geteilt; `3800` Byte bleibt die allgemeinere
-Google-Sicherheitsgrenze. Der Text wird bevorzugt an vollstaendigen
-Satzgrenzen geteilt. Nur ein
-einzelner ueberlanger Satz faellt auf wortweise Teilung zurueck.
+The incremental path has a synchronization point between left-page OCR and
+the start of right-page processing: `PageIngestService.submit` returns a
+completion event that the capture runner waits for. A page-order warning calls
+`ForegroundJobManager.cancel_current_job()`. The waiting runner observes the
+cancel event, raises `ForegroundJobCancelled`, and does not start right-page
+OCR. The subsequent `CANCELLED` job event resets the runtime to `IDLE`.
 
-Alle Segmente werden als getrennte Utterances derselben Generation
-eingereiht und vom bestehenden Prefetch-/Playback-Worker nacheinander
-synthetisiert und abgespielt. Die Labels lauten beispielsweise
-`was-bisher-geschah:1/3` bis `:3/3`. Damit kann eine lange Zusammenfassung
-nicht mehr als einzelne zu grosse Google-TTS-Anfrage enden.
+## Segmenting Long Summary Audio
 
-Summary-Intro und erstes `bing` werden synchron vor dem Start des
-Summary-Jobs wiedergegeben. Sobald `PageAudioPlayer` aktiv ist, verwirft der
-Systemaudio-Worker noch wartende Heartbeat-Eintraege. So kann kein bereits
-freigegebener Heartbeat hinter der Summary-Wiedergabe auf dem globalen
-Audio-Lock warten.
+For Google backends, `PageAudioPlayer.enqueue_text()` checks the byte size of
+the actual rendered input, including SSML for `google-standard-enhanced`.
+Summaries are split above `900` bytes; `3800` bytes remains the general Google
+safety limit. Text is split at complete sentence boundaries whenever
+possible. Only a single overlong sentence falls back to word-based splitting.
 
-Vor der Wiederverwendung von `book_so_far_summary.json` berechnet der
-`SummaryManager` einen SHA-256-Fingerabdruck aus IDs, `updated_at` und Text
-der verwendeten Kapitelzusammenfassungen. Die bisherige reine Prüfung der
-Kapitel-IDs konnte einen veralteten kurzen Buch-Summary-Cache nicht
-erkennen. Fehlt oder unterscheidet sich der Fingerabdruck, wird die
-Buchzusammenfassung neu erzeugt. Der Runtime-Log nennt zusätzlich den
-exakten Summary-Pfad und die Zeichenanzahl des an die Audioausgabe
-übergebenen Texts.
+All segments are queued as separate utterances of the same generation and are
+synthesized and played in order by the existing prefetch/playback worker.
+Labels range, for example, from `was-bisher-geschah:1/3` through `:3/3`. A
+long summary therefore cannot end up as one oversized Google TTS request.
 
-## Vollstaendigkeit von Gemini-Zusammenfassungen
+The summary intro and first `bing` are played synchronously before the summary
+job starts. As soon as `PageAudioPlayer` becomes active, the system-audio
+worker discards queued heartbeat entries. This prevents an already released
+heartbeat from waiting behind summary playback on the global audio lock.
 
-Eine `generateContent`-Antwort darf nicht allein deshalb gespeichert werden,
-weil sie bereits Text enthaelt. Meldet ein Kandidat
-`finishReason=MAX_TOKENS`, ist dieser Text unvollstaendig und kann sogar
-mitten im Wort enden. `GeminiSummaryBackend` verwirft einen solchen Teiltext
-und wiederholt die Anfrage einmal ohne das aus `target-pages` abgeleitete
-`maxOutputTokens`. Nur eine nicht abgebrochene Antwort wird zurueckgegeben.
-Ein erneut abgebrochener Versuch fuehrt zu einem Fehler statt zu einer
-beschaedigten Cache-Datei.
+Before reusing `book_so_far_summary.json`, `SummaryManager` calculates a
+SHA-256 fingerprint from the IDs, `updated_at` values, and text of the section
+summaries used. The previous check of chapter IDs alone could not detect a
+stale, short book-summary cache. The summary is regenerated when the
+fingerprint is absent or different. The runtime log also records the exact
+summary path and the character count of the text passed to audio playback.
 
-Neue Kapitel- und Buch-Summaries tragen in ihren Metadaten
-`generation_complete=true`. Alte Dateien ohne diesen Merker werden nicht
-mehr als gueltiger Cache behandelt und beim naechsten Summary-Aufruf einmalig
-neu erzeugt. In Fehlerdetails werden, soweit von Vertex AI geliefert,
-`promptTokenCount`, `candidatesTokenCount`, `thoughtsTokenCount` und
-`totalTokenCount` ausgegeben.
+## Completeness of Gemini Summaries
 
-Die fachliche Laenge wird nicht mehr ueber dieses technische Tokenlimit
-gesteuert. `target-pages` wird stattdessen mit `250` Woertern pro Seite in
-eine konkrete Wortobergrenze uebersetzt. Die erste Gemini-Anfrage nennt diese
-Grenze im Prompt und erhaelt bis zu `2048` technische Ausgabetokens. Liegt
-das Ergebnis mehr als zehn Prozent ueber dem Ziel, wird es in einer zweiten
-Gemini-Anfrage gezielt gekuerzt. Bleibt es auch danach oberhalb der Toleranz,
-wird es nicht gespeichert. Die JSON-Metadaten halten Zielwortzahl sowie
-Wortzahl vor und nach einer eventuellen Kuerzung fest.
+A `generateContent` response must not be stored merely because it already
+contains text. If a candidate reports `finishReason=MAX_TOKENS`, the text is
+incomplete and may even end in the middle of a word. `GeminiSummaryBackend`
+discards such partial text and retries once without the `maxOutputTokens`
+derived from `target-pages`. Only a response that was not truncated is
+returned. A second truncated response produces an error instead of a damaged
+cache file.
+
+New section and book summaries include `generation_complete=true` in their
+metadata. Legacy files without this marker are no longer accepted as valid
+cache entries and are regenerated once on the next summary request. Error
+details include `promptTokenCount`, `candidatesTokenCount`,
+`thoughtsTokenCount`, and `totalTokenCount` when Vertex AI provides them.
+
+The semantic summary length is no longer controlled by the technical token
+limit. Instead, `target-pages` is converted into a concrete word limit using
+`250` words per page. The first Gemini request states this limit in its prompt
+and receives up to `2048` technical output tokens. If the result exceeds the
+target by more than ten percent, a second Gemini request is used to shorten
+it. If it remains above the tolerance, it is not saved. JSON metadata records
+the target word count and the word counts before and after any shortening
+pass.

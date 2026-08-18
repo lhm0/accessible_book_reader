@@ -1,77 +1,84 @@
-# Double Page Capture
+# Double-Page Capture
 
-Stand: `2026-07-01`
+Last reviewed: `2026-07-01`
 
-## Zweck
+Deutsche Fassung: [Doppelseitenaufnahme](../docs_DE/DOUBLE_PAGE_CAPTURE.md)
 
-Dieses Werkzeug ist der erste produktive Adapter zwischen den realen Pi-Kameras
-und der bestehenden OCR-/TTS-Pipeline.
+## Purpose
 
-Es erledigt genau `Sprint 1`:
+This tool is the first production adapter between the physical Raspberry Pi
+cameras and the existing OCR/TTS pipeline.
 
-- zwei reale Kamerabilder aufnehmen
-- die vorhandenen Remaps automatisch anwenden
-- einen standardisierten `case`-Ordner mit `left.jpg` und `right.jpg` erzeugen
-- direkt danach einen OCR-Ordner mit `left.png`, `right.png` und `manifest.json` erzeugen
-- direkt danach die OCR-Vorverarbeitungsbilder unter `debug/page_1` und `page_2` erzeugen
-- den zugeordneten LED-Kanal je Seite nur waehrend der jeweiligen Aufnahme einschalten
+It implements `Sprint 1`:
 
-Fuer die aktuelle Debug-Phase gibt es zusaetzlich einen einfachen Rohbildmodus:
+- capture two real camera images
+- apply the existing remaps automatically
+- create a standardized `case` directory containing `left.jpg` and
+  `right.jpg`
+- then create an OCR directory containing `left.png`, `right.png`, and
+  `manifest.json`
+- then create OCR preprocessing images below `debug/page_1` and `page_2`
+- enable the LED channel assigned to each page only while that page is being
+  captured
 
-- Aufnahme nur der beiden Rohbilder
-- standardmaessig in der Aufloesung der gespeicherten Remap-Datei
-- stabile Ablage unter `captures/latest/raw/` fuer den schnellen Download auf den Mac
+The current debugging phase also provides a simple raw-image mode:
 
-Der aktuell bevorzugte OCR-Pfad laeuft danach auf dem erzeugten `ocr`-Ordner
-ueber `hardware/run_rapidocr.py`.
+- capture only the two raw images
+- default to the resolution stored in the remap file
+- store them at the stable path `captures/latest/raw/` for quick download to
+  the Mac
 
-Die reine OCR-Vorverarbeitung ist jetzt ausserdem als eigenes Werkzeug
-verfuegbar und wird intern von `capture_double_page` genutzt. `run_fallback_pipeline.py`
-verarbeitet nur noch vorbereitete OCR-Bilder; fuer schnelle Pi-Laeufe ist
-aktuell aber der schlanke Wrapper `hardware/run_rapidocr.py` bevorzugt.
+The currently preferred OCR path subsequently processes the generated `ocr`
+directory with `hardware/run_rapidocr.py`.
 
-Wichtig fuer den produktiven Frontpanel-Pfad:
+OCR preprocessing is also available as a separate tool and is used internally
+by `capture_double_page`. `run_fallback_pipeline.py` now processes prepared
+OCR images only; for quick runs on the Pi, the lightweight
+`hardware/run_rapidocr.py` wrapper is currently preferred.
 
-- `capture_double_page.py` nimmt zunaechst mit der normalen Zuordnung
-  Kamera 0 nach `case/left.jpg` und Kamera 1 nach `case/right.jpg` auf
-- nach den Aufnahmen holt die Runtime das Ergebnis der zuvor gestarteten
-  PN5180-Abfrage ab
-- bei Orientierung 1 bleiben die beiden `case`-Dateien zugeordnet
-- bei Orientierung 2 werden `case/left.jpg` und `case/right.jpg` vertauscht
-- anschliessend dreht die Runtime `case/right.jpg` einmalig um `180` Grad
-- die gemeinsame OCR-Vorverarbeitung dreht im NFC-Runtime-Pfad danach keine
-  Seite erneut
+Important behavior of the production front-panel path:
 
-## Dateien
+- `capture_double_page.py` initially captures camera 0 as `case/left.jpg` and
+  camera 1 as `case/right.jpg` using the normal assignment.
+- After capture, the runtime fetches the result of the previously started
+  PN5180 query.
+- With orientation 1, the two `case` files keep their assignment.
+- With orientation 2, `case/left.jpg` and `case/right.jpg` are swapped.
+- The runtime then rotates `case/right.jpg` once by `180` degrees.
+- In the NFC runtime path, shared OCR preprocessing does not rotate either
+  page again.
 
-- Modul: [abr/hardware/double_page_capture.py](../abr/hardware/double_page_capture.py)
+## Files
+
+- Module: [abr/hardware/double_page_capture.py](../abr/hardware/double_page_capture.py)
 - Wrapper: [hardware/capture_double_page.py](../hardware/capture_double_page.py)
-- gemeinsamer Vorverarbeitungsmodulpfad: [abr/preprocessing/enhance_for_ocr.py](../abr/preprocessing/enhance_for_ocr.py)
-- CLI-Wrapper fuer isolierte Vorverarbeitung: [hardware/enhance_for_ocr.py](../hardware/enhance_for_ocr.py)
-- schlanker RapidOCR-Wrapper: [hardware/run_rapidocr.py](../hardware/run_rapidocr.py)
+- Shared preprocessing module: [abr/preprocessing/enhance_for_ocr.py](../abr/preprocessing/enhance_for_ocr.py)
+- CLI wrapper for isolated preprocessing: [hardware/enhance_for_ocr.py](../hardware/enhance_for_ocr.py)
+- Lightweight RapidOCR wrapper: [hardware/run_rapidocr.py](../hardware/run_rapidocr.py)
 
-## Voraussetzungen Auf Dem Pi
+## Prerequisites on the Pi
 
-- beide Kameras werden von `rpicam-hello --list-cameras` erkannt
-- `rpicam-still` ist verfuegbar
-- die Projekt-`venv` ist installiert
-- `opencv-contrib-python` und `numpy` sind in der `venv` vorhanden
-- die Remaps liegen unter:
+- both cameras are detected by `rpicam-hello --list-cameras`
+- `rpicam-still` is available
+- the project virtual environment is installed
+- `opencv-contrib-python` and `numpy` are installed in the virtual environment
+- the remaps are available at:
   - `calibration/out/cam0_planar.npz`
   - `calibration/out/cam1_planar.npz`
 
-Wichtig:
+Important:
 
-- dieses Werkzeug braucht fuer die Aufnahme **nicht** `Picamera2`
-- es ruft fuer die Aufnahme `rpicam-still` auf
-- ohne explizite Belichtungszeit bleibt `rpicam-still` im normalen Automatikpfad
-- ohne expliziten `--gain` bleibt auch die Gain-Regelung im normalen Automatikpfad
-- die Entzerrung laeuft danach ueber das bestehende
+- this tool does **not** require `Picamera2` for capture
+- it invokes `rpicam-still` for capture
+- without an explicit exposure time, `rpicam-still` retains its normal
+  automatic behavior
+- without an explicit `--gain`, gain control also remains automatic
+- rectification then uses the existing
   [calibration/apply_saved_remap.py](../calibration/apply_saved_remap.py)
 
-## Standardausgabe
+## Standard Output
 
-Ein Lauf erzeugt unter `captures/<session-name>/`:
+One run creates the following structure below `captures/<session-name>/`:
 
 ```text
 captures/
@@ -103,25 +110,24 @@ captures/
     metadata.json
 ```
 
-Bedeutung:
+Meaning:
 
-- `raw/`: rohe Kamerabilder direkt aus `rpicam-still`
-- `rectified/`: mit Remap entzerrte Bilder
-- `case/`: entzerrte, noch nicht OCR-finalisierte Seiten
-- `ocr/`: finale Eingabe fuer `python hardware/run_rapidocr.py --ocr-dir ...`
-- `debug/`: nachvollziehbare OCR-Vorverarbeitung fuer beide Seiten
-- `metadata.json`: verwendete Kameraindizes, Remaps, aufgerufene Kommandos und
-  Laufzeitmetriken
+- `raw/`: raw camera images directly from `rpicam-still`
+- `rectified/`: images rectified with the remap
+- `case/`: rectified pages before final OCR preparation
+- `ocr/`: final input for `python hardware/run_rapidocr.py --ocr-dir ...`
+- `debug/`: inspectable OCR preprocessing for both pages
+- `metadata.json`: camera indices, remaps, invoked commands, and runtime
+  metrics
 
-Zusaetzlich wird immer ein stabiler Spiegel des letzten Laufs unter
-`captures/latest/` erzeugt.
+A stable mirror of the latest run is also always created under
+`captures/latest/`.
 
-Dieser Pfad ist auch die Standardquelle fuer den neuen Review-Modus des
-Kamera-Testservers.
+This path is also the default source for the camera test server's review mode.
 
-## Typischer Lauf Auf Dem Pi
+## Typical Run on the Pi
 
-Aus der Projekt-`venv`:
+From the project's virtual environment:
 
 ```bash
 cd ~/src/abr
@@ -129,36 +135,35 @@ source .venv/bin/activate
 python hardware/capture_double_page.py --no-denoise
 ```
 
-Das Werkzeug verwendet standardmaessig:
+The tool defaults to:
 
-- linke Seite: Kamera `0`
-- rechte Seite: Kamera `1`
-- `LED-left` an `BCM12` waehrend der linken Aufnahme
-- `LED-right` an `BCM13` waehrend der rechten Aufnahme
-- Remaps:
+- left page: camera `0`
+- right page: camera `1`
+- `LED-left` on `BCM12` during left-page capture
+- `LED-right` on `BCM13` during right-page capture
+- remaps:
   - `calibration/out/cam0_planar.npz`
   - `calibration/out/cam1_planar.npz`
 
-Die Session bekommt automatisch einen Zeitstempelnamen wie
+The session automatically receives a timestamped name such as
 `scan_20260626_153000`.
 
-Aktuell gemessener Pi-Lauf vom `2026-07-01` fuer diesen Modus:
+Measured Raspberry Pi runtime on `2026-07-01` for this mode:
 
-- Capture gesamt: ca. `3.85s`
-- Rectify gesamt: ca. `3.86s`
-- OCR-Vorverarbeitung gesamt mit `--no-denoise`: ca. `2.77s`
-- gesamter Capture-Pfad bis `ocr/*.png`: ca. `10.9s`
+- total capture: approximately `3.85s`
+- total rectification: approximately `3.86s`
+- total OCR preprocessing with `--no-denoise`: approximately `2.77s`
+- complete capture path through `ocr/*.png`: approximately `10.9s`
 
-Vergleich:
+For comparison:
 
-- derselbe Vorverarbeitungsblock lag mit aktiviertem De-Noising zuvor bei
-  ca. `15.5s`
-- `--no-denoise` ist deshalb im Moment die bevorzugte Einstellung
+- the same preprocessing stage previously took approximately `15.5s` with
+  denoising enabled
+- `--no-denoise` is therefore the currently preferred setting
 
-## Schrittweiser Rohbild-Test
+## Step-by-Step Raw-Image Test
 
-Fuer die aktuelle Bildqualitaetspruefung solltest du zuerst nur Rohbilder
-aufnehmen:
+For the current image-quality check, capture raw images first:
 
 ```bash
 cd ~/src/abr
@@ -166,21 +171,21 @@ source .venv/bin/activate
 python -m abr.hardware.double_page_capture --raw-only
 ```
 
-Wichtig:
+Important:
 
-- ohne `--width/--height` verwendet das Werkzeug jetzt standardmaessig die in
-  der jeweiligen Remap gespeicherte Kalibrieraufloesung
-- fuer den aktuellen Aufbau sollte das der Vollaufloesungspfad sein
-- die Bilder liegen danach unter:
+- without `--width/--height`, the tool now defaults to the calibration
+  resolution stored in each remap
+- this should select the full-resolution path for the current setup
+- the resulting images are stored at:
   - `captures/latest/raw/cam0_raw.jpg`
   - `captures/latest/raw/cam1_raw.jpg`
 
-Diese beiden Dateien sind der bevorzugte erste Downloadpfad zum Mac.
+These two files are the preferred first download path to the Mac.
 
-## Schrittweiser Rectify-Test
+## Step-by-Step Rectification Test
 
-Wenn die Rohbilder gut aussehen, folgt als naechster Schritt die Entzerrung der
-bereits aufgenommenen Bilder, ohne erneut zu capturen:
+Once the raw images look correct, rectify the existing images without
+capturing them again:
 
 ```bash
 cd ~/src/abr
@@ -188,22 +193,22 @@ source .venv/bin/activate
 python -m abr.hardware.double_page_rectify
 ```
 
-Alternativ ueber den Wrapper:
+Alternatively, use the wrapper:
 
 ```bash
 python hardware/rectify_double_page.py
 ```
 
-Standardpfad:
+The default path:
 
-- liest aus `captures/latest/raw/`
-- schreibt nach:
+- reads from `captures/latest/raw/`
+- writes to:
   - `captures/latest/rectified/`
   - `captures/latest/case/`
   - `captures/latest/ocr/`
   - `captures/latest/debug/`
 
-Erwartete Dateien:
+Expected files:
 
 ```text
 captures/latest/rectified/cam0_rectified.jpg
@@ -218,27 +223,27 @@ captures/latest/debug/page_2/02_enhanced.png
 captures/latest/metadata.json
 ```
 
-Damit kannst du die entzerrten Bilder wieder sehr einfach auf den Mac ziehen.
+These paths make it easy to copy the rectified images back to the Mac.
 
-Wenn eine Seite nach der Entzerrung auf dem Kopf steht, kannst du pro Seite
-eine feste Nachrotation angeben.
+If one page is upside down after rectification, a fixed post-rotation can be
+specified per page.
 
-Typischer Fall fuer den aktuellen Aufbau:
+Typical case for the current setup:
 
 ```bash
 python -m abr.hardware.double_page_rectify --right-rotate 180
 ```
 
-Dann wird nur die rechte Seite nach der Entzerrung um `180` Grad gedreht,
-bevor `case/right.jpg` geschrieben wird.
+This rotates only the right page by `180` degrees after rectification and
+before writing `case/right.jpg`.
 
-Dieser manuelle Parameter ist fuer isolierte Capture-/Rectify-Tests gedacht.
-Im produktiven Frontpanel-Pfad wird die rechte Seitendatei nach der
-NFC-basierten Zuordnung automatisch gedreht.
+This manual parameter is intended for isolated capture and rectification
+tests. In the production front-panel path, the right page is rotated
+automatically after NFC-based assignment.
 
-## Aktueller Folgeaufruf
+## Current Follow-Up Command
 
-Nach einem erfolgreichen Capture ist der derzeit bevorzugte OCR-Lauf:
+After a successful capture, the currently preferred OCR run is:
 
 ```bash
 cd ~/src/abr
@@ -250,29 +255,28 @@ python hardware/run_rapidocr.py \
   --overlay
 ```
 
-Wichtig:
+Important:
 
-- die zusaetzliche Orientierungserkennung bleibt als Option im Wrapper
-  vorhanden
-- sie ist aktuell aber **nicht** Teil des bevorzugten Standardpfads
-- Grund: sie kostet derzeit mehrere Sekunden pro Seite und soll spaeter separat
-  erneut optimiert werden
+- the wrapper still provides optional additional orientation detection
+- it is currently **not** part of the preferred standard path
+- it presently costs several seconds per page and is intended for separate
+  optimization later
 
-## Wichtige Optionen
+## Important Options
 
-Fester Session-Name:
+Fixed session name:
 
 ```bash
 python hardware/capture_double_page.py --session-name first_book_scan
 ```
 
-Abweichende Kamera-Zuordnung:
+Different camera assignment:
 
 ```bash
 python hardware/capture_double_page.py --left-camera 1 --right-camera 0
 ```
 
-Abweichende Remaps:
+Different remaps:
 
 ```bash
 python hardware/capture_double_page.py \
@@ -280,7 +284,7 @@ python hardware/capture_double_page.py \
   --right-remap calibration/out/cam0_planar.npz
 ```
 
-Hoehere JPEG-Qualitaet oder laengerer Timeout:
+Higher JPEG quality or a longer timeout:
 
 ```bash
 python hardware/capture_double_page.py \
@@ -288,26 +292,26 @@ python hardware/capture_double_page.py \
   --timeout-ms 2000
 ```
 
-Gemeinsame manuelle Belichtungszeit fuer beide Kameras:
+Shared manual exposure time for both cameras:
 
 ```bash
 python hardware/capture_double_page.py \
   --shutter-us 8000
 ```
 
-Hinweis:
+Notes:
 
-- `--shutter-us` setzt die Belichtungszeit in Mikrosekunden fuer beide Seiten
-- ohne `--shutter-us` bleibt die bisherige automatische Belichtung aktiv
+- `--shutter-us` sets the exposure time in microseconds for both pages
+- without `--shutter-us`, automatic exposure remains active
 
-Gemeinsamer manueller Gain fuer beide Kameras:
+Shared manual gain for both cameras:
 
 ```bash
 python hardware/capture_double_page.py \
   --gain 1.5
 ```
 
-Vollstaendig manuelle Basis fuer beide Kameras:
+Fully manual baseline for both cameras:
 
 ```bash
 python hardware/capture_double_page.py \
@@ -315,12 +319,12 @@ python hardware/capture_double_page.py \
   --gain 1.5
 ```
 
-Hinweis:
+Notes:
 
-- `--gain` setzt den analogen Gain fuer beide Seiten
-- ohne `--gain` bleibt die bisherige automatische Gain-Regelung aktiv
+- `--gain` sets analog gain for both pages
+- without `--gain`, automatic gain control remains active
 
-Isolierte OCR-Vorverarbeitung auf einen bereits vorhandenen `case`-Ordner:
+Run OCR preprocessing in isolation on an existing `case` directory:
 
 ```bash
 python hardware/enhance_for_ocr.py \
@@ -329,27 +333,27 @@ python hardware/enhance_for_ocr.py \
   --debug-dir captures/latest/debug
 ```
 
-Das ist derselbe Vorverarbeitungspfad, den auch `capture_double_page` intern
-nutzt.
+This is the same preprocessing path used internally by
+`capture_double_page`.
 
-Nur Rohbilder ohne Entzerrung und Case-Erzeugung:
+Capture raw images only, without rectification or case generation:
 
 ```bash
 python -m abr.hardware.double_page_capture --raw-only
 ```
 
-Bestimmten Session-Ordner statt `captures/latest/` entzerren:
+Rectify a specific session directory instead of `captures/latest/`:
 
 ```bash
 python -m abr.hardware.double_page_rectify --session-dir captures/scan_20260626_184412
 ```
 
-## Weiterer Pipeline-Lauf
+## Continuing Through the Pipeline
 
-Nach erfolgreicher Aufnahme gibst du den erzeugten `ocr`-Ordner in die
-bestehende OCR-/TTS-Pipeline.
+After a successful capture, pass the generated `ocr` directory to the
+existing OCR/TTS pipeline.
 
-Beispiel fuer den vollen Fallback-Pfad:
+Example using the complete fallback path:
 
 ```bash
 python run_fallback_pipeline.py \
@@ -358,8 +362,8 @@ python run_fallback_pipeline.py \
   --output-dir runs/scan_20260626_153000
 ```
 
-Fuer einen direkten OCR-Vergleich kann derselbe vorbereitete `ocr`-Ordner
-auch mit Tesseract ausgewertet werden:
+For a direct OCR comparison, the same prepared `ocr` directory can be
+processed with Tesseract:
 
 ```bash
 python run_fallback_pipeline.py \
@@ -368,10 +372,10 @@ python run_fallback_pipeline.py \
   --output-dir runs/scan_20260626_153000_tesseract
 ```
 
-Oder mit Live-TTS:
+Or with live TTS:
 
 ```bash
-export GOOGLE_CLOUD_QUOTA_PROJECT=DEIN_PROJECT_ID
+export GOOGLE_CLOUD_QUOTA_PROJECT=YOUR_PROJECT_ID
 python run_fallback_pipeline.py \
   --case-dir captures/scan_20260626_153000/ocr \
   --ocr-backend rapidocr \
@@ -385,12 +389,13 @@ python run_fallback_pipeline.py \
   --output-dir runs/scan_20260626_153000_live
 ```
 
-## Testziel Fuer Sprint 1
+## Sprint 1 Acceptance Criteria
 
-`Sprint 1` ist erfolgreich, wenn:
+`Sprint 1` is successful when:
 
-- `hardware/capture_double_page.py` zwei Rohbilder erzeugt
-- beide Rohbilder automatisch entzerrt werden
-- `case/left.jpg` und `case/right.jpg` entstehen
-- `ocr/left.png` und `ocr/right.png` entstehen
-- `python run_fallback_pipeline.py --case-dir ...` auf diesem `ocr`-Ordner laeuft
+- `hardware/capture_double_page.py` creates two raw images
+- both raw images are rectified automatically
+- `case/left.jpg` and `case/right.jpg` are created
+- `ocr/left.png` and `ocr/right.png` are created
+- `python run_fallback_pipeline.py --case-dir ...` runs on the resulting
+  `ocr` directory

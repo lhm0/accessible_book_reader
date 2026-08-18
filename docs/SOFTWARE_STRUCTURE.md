@@ -1,253 +1,285 @@
 # Software Structure
 
-Stand: `2026-08-01`
+Last reviewed: `2026-08-18`
 
-## Uebersicht
+Deutsche Fassung: [Softwarestruktur](../docs_DE/SOFTWARE_STRUCTURE.md)
 
-Im Repo existieren inzwischen zwei relevante Ebenen:
+## Purpose
 
-1. der historische Vollpfad ueber [run_fallback_pipeline.py](../run_fallback_pipeline.py)
-2. der aktuelle produktionsnahe Geraetepfad ueber
-   [hardware/control_panel_service.py](../hardware/control_panel_service.py)
+This document explains the current repository structure and maps the principal
+modules to the production device path, development tools, and persistent data.
 
-Der neue Schwerpunkt liegt klar auf Ebene 2.
+## Runtime Paths
 
-## Historischer Vollpfad
+### Production Device Path
 
-Einstieg:
+The canonical Raspberry Pi entry point is
+[hardware/control_panel_service.py](../hardware/control_panel_service.py),
+started continuously by the systemd service.
 
-- [run_fallback_pipeline.py](../run_fallback_pipeline.py)
-- [abr/cli.py](../abr/cli.py)
-- [abr/pipeline.py](../abr/pipeline.py)
+The main flow is:
 
-Dieser Pfad bleibt wichtig fuer:
+```text
+front-panel event
+  -> NFC query through the Pico gateway
+  -> capture both cameras
+  -> evaluate NFC result and book orientation
+  -> prepare, recognize, ingest, and read the left page
+  -> process the right page in parallel
+  -> update section assembly and summaries
+```
 
-- Vergleichslaeufe
-- OCR-/TTS-Experimente
-- isolierte Pipeline-Tests
+### Development and Comparison Path
 
-## Aktueller Geraetepfad
+[run_fallback_pipeline.py](../run_fallback_pipeline.py) runs a complete but
+non-production OCR/TTS comparison through `abr.cli` and `abr.pipeline`. It is
+retained for backend comparisons, layout tests, and isolated experiments. It
+is not the finished device runtime.
 
-### Einstieg
+## The `abr` Python Package
 
-- [hardware/control_panel_service.py](../hardware/control_panel_service.py)
+### `abr/control`: Device Coordination
 
-### Eingabe und Frontpanel
+- [runtime.py](../abr/control/runtime.py)
+  - `RuntimeController`, `ForegroundJobManager`, and `PageAudioPlayer`
+  - start/stop semantics, heartbeat, and book deletion dialog
+  - capture, OCR, ingest, summary, and audio orchestration
+  - protection against repeated and backward page scans
+- [frontpanel.py](../abr/control/frontpanel.py)
+  - long-lived monitor, debounce, and EC11 quadrature decoding
+  - hardware events and application-action routing
+- [audio_volume.py](../abr/control/audio_volume.py)
+  - ten volume levels from 20 to 100 percent
+  - thread-safe target value and optional ALSA mixer synchronization
+- [artifact_cleanup.py](../abr/control/artifact_cleanup.py)
+  - controlled cleanup of short-lived capture and OCR artifacts
 
-- [abr/hardware/control_panel.py](../abr/hardware/control_panel.py)
-  - GPIO-Abstraktion
-  - Flankencallbacks fuer das produktive `rpi-gpio`-Backend
-- [abr/control/frontpanel.py](../abr/control/frontpanel.py)
-  - Flankeninterrupts und Quadraturdekodierung fuer EC11 A/B
-  - Polling mit Debounce fuer Taster
-  - Encoder-Polling-Fallback fuer `pinctrl`
-  - Event-Typen
-  - Action-Router
+### `abr/hardware`: Raspberry Pi Adapters
 
-### Runtime
+- [control_panel.py](../abr/hardware/control_panel.py)
+  - BCM assignments and the `rpi-gpio`/`pinctrl` backends
+- [led_control.py](../abr/hardware/led_control.py)
+  - separate lighting for left and right capture
+- [double_page_capture.py](../abr/hardware/double_page_capture.py)
+  - capture through `rpicam-still`, remapping, and session layout
+- [double_page_rectify.py](../abr/hardware/double_page_rectify.py)
+  - rectify previously captured raw images
+- [pico_gateway_client.py](../abr/hardware/pico_gateway_client.py)
+  - shared UART client for the Raspberry Pi Pico gateway
+- [nfc_gateway.py](../abr/hardware/nfc_gateway.py)
+  - reader status, ISO14443A/ISO15693, and orientation interpretation
+  - two-stage `STATUS_START` and `STATUS_FETCH` query
 
-- [abr/control/runtime.py](../abr/control/runtime.py)
-  - `RuntimeController`
-  - `ForegroundJobManager`
-  - `PageAudioPlayer`
-  - Heartbeat
-  - Buch-Loeschdialog
-  - Verkabelung von `capture -> Bildvorbereitung -> OCR -> page-ingest ->
-    Seitenausgabe`
-  - beide Seiten werden zuerst aufgenommen, danach links vor rechts verarbeitet
+The Raspberry Pi contains no direct PN5180 or PN532 driver. Readers connect
+only to the Pico; Pi software sees only the UART protocol.
 
-- [abr/control/audio_volume.py](../abr/control/audio_volume.py)
-  - Lautstaerkelogik mit 10 Stufen von `20%` bis `100%`
-  - threadsicherer Sollwert, der im EC11-Callback ohne Subprozess aktualisiert
-    werden kann
-  - nachgelagerte Synchronisation mit dem optionalen ALSA-Mixer
+### `abr/book`: Persistent Book Domain
 
-- [abr/control/artifact_cleanup.py](../abr/control/artifact_cleanup.py)
-  - Cleanup nach OCR oder nach Ingest
-
-### NFC
-
-- [abr/hardware/nfc_gateway.py](../abr/hardware/nfc_gateway.py)
-  - Runtime-Leser fuer Gateway-Status
-  - zweistufige Abfrage mit `STATUS_START` und `STATUS_FETCH`
-  - gemeinsame Auswertung von ISO14443A und ISO15693 inklusive Reader-ID
-- [abr/hardware/pico_gateway_client.py](../abr/hardware/pico_gateway_client.py)
-  - UART-Client
-- [hardware/pn5180_gateway_client.py](../hardware/pn5180_gateway_client.py)
-  - Terminal-Wrapper
-
-### Buchdaten
-
-- [abr/book/models.py](../abr/book/models.py)
+- [models.py](../abr/book/models.py)
   - `BookRecord`, `ScanRecord`, `PageRecord`, `ChapterRecord`,
-    `SummaryRecord`
-- [abr/book/store.py](../abr/book/store.py)
-  - persistente Buchdatenablage
-  - ISO15693-Aliaszuordnung zu einem fuehrenden ISO14443A-Buch
-- [abr/book/session.py](../abr/book/session.py)
-  - `BookSessionResolver`
-- [abr/book/page_ingestor.py](../abr/book/page_ingestor.py)
-  - `PageIngestor`
-  - `PageIngestService`
-- [hardware/page_ingest_debug.py](../hardware/page_ingest_debug.py)
-  - Offline-Debug-CLI fuer Ingest
+    `SummaryRecord`, and chapter markers
+- [store.py](../abr/book/store.py)
+  - atomic JSON and text storage below `library/<tag_id>/`
+  - primary ISO14443A ID and ISO15693 aliases
+  - persistent runtime state and language validation
+- [session.py](../abr/book/session.py)
+  - tag-to-book-session resolution
+- [page_ingestor.py](../abr/book/page_ingestor.py)
+  - converts OCR reports into semantic `PageRecord`s
+  - page numbers, chapter markers, paragraphs, and page transitions
+  - separate `clean_text` and `speak_text` fields
+  - language-aware TTS preparation
+- [chapter_assembler.py](../abr/book/chapter_assembler.py)
+  - synthetic sections in a 10-to-20-page window
+  - persistent boundaries, including offsets within a page
+  - open section text for temporary recaps
+- [summary_manager.py](../abr/book/summary_manager.py)
+  - Gemini backend for section and book summaries
+  - length policy, cache validation, language, and source fingerprint
+  - non-persistent summary of the open section
+  - optional asynchronous `SummaryService`
 
-### Audio
+See [BOOK_RUNTIME_DATA_ARCHITECTURE.md](BOOK_RUNTIME_DATA_ARCHITECTURE.md) for
+the complete data layout.
 
-- [abr/system_audio.py](../abr/system_audio.py)
-  - Erzeugen und Abspielen von Systemhinweisen
-- [hardware/generate_audio_message.py](../hardware/generate_audio_message.py)
-  - CLI fuer Warnhinweise
-- [abr/audio_playback.py](../abr/audio_playback.py)
-  - Datei-Playback mit gemeinsamem Playback-Lock
-  - dynamische Software-Lautstaerke durch blockweise Abfrage des aktuellen
-    Sollwerts waehrend der Wiedergabe
-  - stabilisierter `aplay`-Streamingpfad mit `250ms` PCM-Vorlauf, `300ms`
-    ALSA-Puffer, `50ms` Perioden und sofortigem Flush jedes PCM-Blocks
-  - verwendet auf dem Pi `aplay` ohne explizites ALSA-Geraet
-  - erwartet deshalb ein systemweites `default`-Plug-PCM fuer
-    `CARD=MAX98357A`; Details stehen in `docs/RASPBERRY_PI_SETUP.md`
+### Capture, Image Preparation, and OCR
 
-### Capture und OCR
+- [capture_ocr.py](../abr/capture_ocr.py)
+  - lightweight regular and incremental OCR execution
+  - writes reports and optional overlays
+- `abr/preprocessing/`
+  - `enhance_for_ocr.py`: production per-page preparation
+  - `processor.py`: general preprocessing stages
+- `abr/orientation/detector.py`
+  - optional 0/180-degree detection, disabled in the preferred path
+- `abr/ocr/`
+  - `base.py` and `factory.py`: backend interface and selection
+  - `rapidocr_backend.py`: production local OCR path
+  - `tesseract_backend.py`: fallback and comparison
+  - `paddle_backend.py`: experimental comparison path
+- `abr/layout/basic.py`: basic paragraph and layout blocks
+- `abr/input/loader.py`: prepared pipeline input loading
+- `abr/debug/`: debug artifacts and visualizations
+- `abr/reporting.py`: serialized pipeline reports and timings
 
-- [abr/hardware/double_page_capture.py](../abr/hardware/double_page_capture.py)
-  - Capture-Implementierung
-- der Runtime-Adapter in `abr/control/runtime.py` ordnet nach `STATUS_FETCH`
-  die beiden `case`-Dateien der Buchorientierung zu und dreht die fertige
-  rechte Seitendatei einmalig um 180 Grad
-- [hardware/capture_double_page.py](../hardware/capture_double_page.py)
-  - Pi-CLI fuer Capture
-- [abr/capture_ocr.py](../abr/capture_ocr.py)
-  - schlanker OCR-Pfad fuer vorbereitete OCR-Bilder
-- [hardware/run_rapidocr.py](../hardware/run_rapidocr.py)
-  - Pi-CLI fuer RapidOCR
+The stage boundaries are documented in [IMAGE_PIPELINE.md](IMAGE_PIPELINE.md).
 
-### OCR, Layout und Text
+### Text Logic
 
-- [abr/ocr/rapidocr_backend.py](../abr/ocr/rapidocr_backend.py)
-- [abr/ocr/tesseract_backend.py](../abr/ocr/tesseract_backend.py)
-- [abr/ocr/paddle_backend.py](../abr/ocr/paddle_backend.py)
-- [abr/layout/basic.py](../abr/layout/basic.py)
-- [abr/text_logic/ocr_cleanup.py](../abr/text_logic/ocr_cleanup.py)
-  - repariert Worttrennungen und typische OCR-Textartefakte
-  - zieht gesperrt gesetzte Buchstabenfolgen zusammen
-  - erkennt kurze Grossbuchstaben-Ueberschriften und erzeugt fuer
-    `speak_text` eine lesbare Gross-/Kleinschreibung
-  - normalisiert deutsche Ausspracheausnahmen im `speak_text`: `Dr.` zu
-    `Doktor` und `Notre-Dame` zu `Notre Damm`
-- [abr/text_logic/segmenter.py](../abr/text_logic/segmenter.py)
-- [abr/text_logic/reading_order.py](../abr/text_logic/reading_order.py)
+- [ocr_cleanup.py](../abr/text_logic/ocr_cleanup.py)
+  - hyphenation and common OCR artifacts
+  - letter-spaced words and all-uppercase headings
+  - German pronunciation exceptions `Dr.` → `Doktor` and
+    `Notre-Dame` → `Notre Damm`
+- [segmenter.py](../abr/text_logic/segmenter.py)
+  - sentence and TTS segmentation
+- [reading_order.py](../abr/text_logic/reading_order.py)
+  - reading order of detected regions
 
-### TTS
+### TTS and Audio Playback
 
-- [abr/tts/base.py](../abr/tts/base.py)
-- [abr/tts/command_backend.py](../abr/tts/command_backend.py)
+- `abr/tts/base.py`: shared TTS interface
+- `abr/tts/command_backend.py`
+  - eSpeak, macOS `say`, Piper, OpenAI, and ElevenLabs
+  - Google Standard, Neural2, and Gemini Flash TTS
+- [audio_playback.py](../abr/audio_playback.py)
+  - shared process-wide playback lock
+  - block-wise PCM streaming to `aplay`
+  - dynamic software volume and underrun protection
+- [system_audio.py](../abr/system_audio.py)
+  - serial queue for pre-generated system prompts
 
-Wichtig:
+Production page playback currently uses `google-standard-enhanced`. Its
+renderer creates chapter, sentence, paragraph, and dialogue pauses as SSML at
+runtime; these annotations are not persisted in book data.
 
-- Seitenausgabe nutzt aktuell vor allem `google`
-- fuer Kapitelansagen fuegt die Runtime SSML-Pausen nur bei SSML-faehigen
-  Backends wie `google` und `say` ein
-- `google-standard-enhanced` behandelt normalisierte
-  Grossbuchstaben-Ueberschriften als eigene Kapitelgrenze mit `1350ms` Pause
-  und verwendet `900ms` Satz- sowie `2000ms` Absatzpause; Absatzgrenzen direkt
-  nach vollstaendig eingerahmten Dialogsaetzen erhalten nur die Satzpause
+### Language and Google Authentication
 
-### Buchsprachenkonfiguration
+- [language_config.py](../abr/language_config.py)
+  - immutable German and U.S. English profiles
+  - atomic selection in `~/.config/abr/device.json`
+- [google_cloud_auth.py](../abr/google_cloud_auth.py)
+  - shared ADC access and token, project, and quota-project resolution
 
-- [abr/language_config.py](../abr/language_config.py)
-  - zentrale unveraenderliche Profile fuer Deutsch und U.S.-Englisch
-  - fehlende Konfiguration verwendet die bisherigen deutschen Werte
-  - persistente, atomare Auswahl unter `~/.config/abr/device.json`
-- [deploy/install_language_switch.sh](../deploy/install_language_switch.sh)
-  - installiert den Systembefehl `abr-language`
-- `hardware/control_panel_service.py` laedt das Profil beim Start und
-  konfiguriert Standard-TTS, Neural2, ElevenLabs und Gemini Flash
-- `PageIngestor` erzeugt sprachabhaengig `Kapitel ...` oder `Chapter ...` fuer
-  isolierte Kapitelnummern
-- normaler und Enhanced-SSML-Renderer erkennen das Kapitelwort des Profils
-- `CaptureOCRJobConfig` transportiert `de|en` durch beide OCR-Runtime-Pfade
-- RapidOCR behaelt fuer Deutsch den bisherigen Default-Enginepfad und verwendet
-  fuer Englisch ein separates mobiles PP-OCRv5-Recognition-Modell
-- OCR-Reports und Scanmetadaten halten Sprache und Modellprofil fest
-- Deutsch bleibt bei fehlender Konfiguration mit den bisherigen Stimmen und
-  Ausgaben der Default
-- Details und Stufenplan:
-  [LANGUAGE_PROFILES.md](../docs/LANGUAGE_PROFILES.md)
+Language is propagated through capture, OCR, book, section, summary, and TTS.
+Mixed-language data is rejected. See
+[LANGUAGE_PROFILES.md](LANGUAGE_PROFILES.md).
 
-### E-Mail-Fernwartung
+### Operational Features
 
-- [abr/remote_mail.py](../abr/remote_mail.py)
-  - gemeinsame SMTP-/IMAP-Implementierung
-  - atomisches Speichern ohne Ueberschreiben
-  - Absender-, Betreff- und Anhangsvalidierung
-  - UID-Zustand fuer gelesene und ungelesene Upload-Mails
-- [abr/remote_mail_download.py](../abr/remote_mail_download.py)
-  - Moduleinstieg fuer den globalen Befehl `email_download`
-- [abr/remote_mail_upload.py](../abr/remote_mail_upload.py)
-  - einmaliger IMAP-Prueflauf fuer den `systemd`-Dienst
-- [deploy/install_remote_mail.sh](../deploy/install_remote_mail.sh)
-  - installiert globalen Download-Wrapper, Upload-Service und Timer
-- `deploy/abr-email-upload.service` und `deploy/abr-email-upload.timer`
-  - pruefen den Posteingang alle zwei Minuten
+- [wifi_profiles.py](../abr/wifi_profiles.py)
+  - NetworkManager profiles, priorities, switching, and persistent autoconnect
+- [remote_mail.py](../abr/remote_mail.py), `remote_mail_download.py`, and
+  `remote_mail_upload.py`
+  - optional validated SMTP/IMAP file transfer
+- [usage_statistics.py](../abr/usage_statistics.py)
+  - per-book page, audio, and summary counters
+- [usage_report.py](../abr/usage_report.py)
+  - daily report, e-mail delivery, and archiving
 
-### Nutzerstatistik
+Personal configuration exists only below `~/.config/abr/`, in
+`~/.config/gcloud/`, or in NetworkManager, never in the repository.
 
-- [abr/usage_statistics.py](../abr/usage_statistics.py)
-  - persistente buchweise Zaehler mit Statistiktag ab `04:00`
-  - atomische JSON-Ablage und Prozess-/Thread-Sperren
-  - erzeugt fuer abgeschlossene Tage ohne Nutzung synthetische Leerperioden
-  - archivierte Leerperioden verhindern mehrfachen Versand desselben
-    Nullberichts und erlauben das geordnete Nachholen mehrtaegiger Luecken
-- [abr/usage_report.py](../abr/usage_report.py)
-  - formatiert abgeschlossene Perioden, versendet sie ueber den bestehenden
-    Mail-Account und archiviert erst nach erfolgreichem Versand
-  - versendet auch Berichte mit `Keine Nutzung erfasst.` und Nullsummen
-- `deploy/abr-usage-report.service` und `deploy/abr-usage-report.timer`
-  - taeglicher, persistenter systemd-Lauf um `04:00`
-- Installation und Betrieb:
-  [USAGE_STATISTICS.md](../docs/USAGE_STATISTICS.md)
+## Hardware and Diagnostic CLIs
 
-Der Upload-Betreff enthaelt nur den Zielordner, zum Beispiel
-`save src/abr/`. Der Name des einzigen Anhangs wird als Zieldateiname
-verwendet. Erfolgreich verarbeitete Mails werden aus dem IMAP-Postfach
-geloescht. Details stehen in `docs/REMOTE_MAINTENANCE_EMAIL.md`.
+The `hardware/` directory contains thin executable wrappers and diagnostics:
 
-## Neue Buchschicht
+- `control_panel_service.py`: production process entry point
+- `capture_double_page.py`, `rectify_double_page.py`: capture and rectification
+- `enhance_for_ocr.py`, `run_rapidocr.py`: preparation and OCR
+- `camera_test_server.py`: camera live view and artifact review
+- `control_panel_test.py`, `led_light_test.py`: hardware diagnostics
+- `page_ingest_debug.py`: offline ingest diagnostics
+- `generate_audio_message.py`: system-prompt generation
+- `pn5180_gateway_client.py`, `pn532_gateway_client.py`: UART terminal wrappers
+- `email_download.py`, `email_upload.py`: legacy compatibility wrappers; the
+  installed production path uses the `abr.remote_mail_*` modules
 
-Im `abr/book`-Paket liegen jetzt zusaetzlich:
+## Pico Firmware
 
-- `abr/book/chapter_assembler.py`
-  - bildet aus `PageRecord`s kuenstliche 10-20-Seiten-Abschnitte
-  - speichert Mid-Page-Grenzen persistent im Runtime-State
-  - liefert mit `collect_pending_content()` den noch nicht abgeschlossenen
-    Text ab dieser persistenten Grenze, ohne einen Abschnitt zu erzwingen
-- `abr/book/summary_manager.py`
-  - erzeugt persistente Abschnitts- und Buchzusammenfassungen
-  - erzeugt mit `summarize_chapter_progress()` eine nicht gespeicherte
-    aktuelle Rueckschau aus letzter Abschnittszusammenfassung und offenem Text
-  - erzeugt Abschnitts- und Gesamtzusammenfassungen ueber Gemini
-  - erzeugt neue Abschnittszusammenfassungen im aktuellen Runtime-Pfad direkt
-    nach neuer Abschnittsbildung
-  - kann Summary-Caches bei geaenderter Zielgroesse automatisch neu erzeugen
-  - erzeugt deutsche oder U.S.-englische Prompts anhand des aktiven
-    Sprachprofils
-  - validiert persistente Kapitel- und Buch-Caches auch gegen deren Sprache;
-    alte sprachlose Caches gelten kompatibel als Deutsch
-  - enthaelt weiterhin auch `SummaryService` als optionale asynchrone
-    Hilfskomponente
-- `abr/book/page_ingestor.py`
-  - ersetzt beim inkrementellen OCR-Lauf einen zunaechst unnummeriert
-    gespeicherten Seitenplatzhalter, sobald dieselbe Seite im vollstaendigen
-    Report eine Seitenzahl erhalten hat
-  - loescht den Platzhalter erst nach erfolgreichem Speichern der nummerierten
-    Seite und nur bei gleicher Scan-ID, Seite und OCR-Report-Seiten-ID
-  - bindet neue Buecher an `BookRecord.language` und lehnt OCR-Reports oder
-    bestehende Buecher mit abweichender Sprache vor dem Speichern ab
-- `abr/book/store.py`
-  - behandelt alte `BookRecord`s ohne Sprache kompatibel als Deutsch
-  - stellt mit `require_book_language()` die zentrale Sprachpruefung fuer
-    nachgelagerte Buchfunktionen bereit
-- `abr/book/chapter_assembler.py`
-  - prueft die Sprache aller Quellseiten gegen das Buch und schreibt sie in
-    die Kapitelmetadaten
+- `hardware/pn5180_gateway/`
+  - preferred PlatformIO firmware for up to two PN5180 readers
+  - shared Pico SPI bus with readers enabled strictly one at a time
+- `hardware/pn532_gateway/`
+  - alternative PlatformIO firmware using separate Pico I²C buses
+
+Both gateways provide a related line-oriented UART protocol to the Pi. Build
+artifacts below `.pio/` are not versioned.
+
+## Calibration
+
+The `calibration/` directory contains:
+
+- `generate_charuco_board.py`: printable reference board
+- `calibrate_planar_charuco.py`: camera model and fixed-remap generation
+- `apply_saved_remap.py`: remap application to scanner images
+- `manual_undistort.py`: manual comparison and fallback path
+- `out/`: reference board, remaps, and previews
+- `shots/`: calibration captures
+
+## Deployment
+
+The `deploy/` directory contains templates and idempotent installers:
+
+- `install_control_panel_service.sh`: production runtime unit
+- `install_language_switch.sh`: global `abr-language` command
+- `install_wifi_autoconnect.sh`: one-time privileged NetworkManager setup; no
+  permanent ABR unit
+- `install_remote_mail.sh`: optional upload timer and download command
+- `install_usage_statistics.sh`: optional daily usage report
+
+Installers substitute local user, home, repository, Python, and configuration
+paths only when writing units to `/etc/systemd/system/`.
+
+## Hardware Designs, Mechanics, and Audio Assets
+
+- `hardware/electronics/`: KiCad projects and current production data
+- `hardware/mechanics/`: CAD sources and exported print files
+- `system_audio/messages/de|en/`: pre-generated system prompts
+- `system_audio/messages/README.md`: provenance and permitted use of audio
+
+## Runtime and Generated Directories
+
+- `library/`: persistent local book data; do not publish
+- `captures/`: short-lived camera and preprocessing artifacts
+- `runs/`: manual pipeline and comparison runs
+- `temp/`: temporary work data
+- `.venv/`, `build/`, `*.egg-info`, `__pycache__/`, `.pytest_cache/`: local
+  Python artifacts
+- `datasheets/`: deliberately local only, not part of the public repository
+
+The production runtime must write book data only through `BookStore`. Other
+generated directories are diagnostic or working areas, not canonical book
+data.
+
+## Tests
+
+`tests/` contains unit and integration coverage for all principal layers:
+
+- capture, remapping, image preparation, and OCR backends
+- text cleanup, layout, and segmentation
+- BookStore, PageIngestor, ChapterAssembler, and SummaryManager
+- front panel, runtime, audio, volume, and system prompts
+- NFC gateway and UART parsing
+- language and the English end-to-end integration path
+- Wi-Fi, e-mail, and usage statistics
+
+Run:
+
+```bash
+cd ~/src/abr
+source .venv/bin/activate
+python -m pytest -q
+```
+
+Hardware, Google services, and real audio quality are also verified on the Pi;
+automated tests replace external services with deterministic test backends.
+
+## Related Architecture Documents
+
+- [CONTROL_PANEL_ARCHITECTURE.md](CONTROL_PANEL_ARCHITECTURE.md)
+- [CONTROL_RUNTIME_ARCHITECTURE.md](CONTROL_RUNTIME_ARCHITECTURE.md)
+- [BOOK_RUNTIME_DATA_ARCHITECTURE.md](BOOK_RUNTIME_DATA_ARCHITECTURE.md)
+- [IMAGE_PIPELINE.md](IMAGE_PIPELINE.md)
+- [HARDWARE_GPIO_PLAN.md](HARDWARE_GPIO_PLAN.md)
+- [RASPBERRY_PI_SETUP.md](RASPBERRY_PI_SETUP.md)

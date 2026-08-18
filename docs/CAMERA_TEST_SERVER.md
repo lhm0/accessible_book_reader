@@ -1,58 +1,61 @@
 # Camera Test Server
 
-Stand: `2026-07-01`
+Last reviewed: `2026-07-01`
 
-## Zweck
+Deutsche Fassung: [Kamera-Testserver](../docs_DE/CAMERA_TEST_SERVER.md)
 
-Dieses Skript startet auf dem `Raspberry Pi 5` einen kleinen HTTP-Server und
-arbeitet jetzt in zwei funktionalen Modi:
+## Purpose
 
-- `live`: zeigt das Livebild einer angeschlossenen Kamera im Browser
-- `review`: zeigt auf einer gemeinsamen Seite immer zwei Bilder untereinander
-  an und schaltet oben per Radio-Buttons zwischen vier Quellen um:
+This script starts a small HTTP server on the `Raspberry Pi 5` and provides
+two functional modes:
+
+- `live`: displays the live image from a connected camera in a browser
+- `review`: displays two images, one below the other, on a shared page and
+  uses radio buttons at the top to switch between four sources:
   - `raw images`
-  - `entzerrte Bilder`
+  - `rectified images`
   - `enhanced images`
   - `OCR overlay`
 
-Die frueheren Modi `capture-review`, `ocr-review` und `ocr-words-review`
-starten jetzt dieselbe Review-Seite nur mit unterschiedlicher Vorauswahl.
+The former `capture-review`, `ocr-review`, and `ocr-words-review` modes now
+start the same review page with different initial selections.
 
-Der aktuell verifizierte Zielpfad fuer den Hardwareaufbau ist:
+The currently verified target setup is:
 
-- `2` Kameras am `Raspberry Pi 5`
-- Start eines Testservers pro Kamera auf dem Pi
-- Anzeige der Testseiten vom Mac aus ueber das Netzwerk
-- Review der letzten Capture-Ergebnisse ueber `captures/latest/`
-- Review der letzten OCR-Overlays ueber ein passendes OCR-Debug-Verzeichnis,
-  aktuell meist `runs/latest_rapidocr/debug/`
+- `2` cameras connected to the `Raspberry Pi 5`
+- one test server per camera running on the Pi
+- test pages viewed from a Mac over the network
+- review of the most recent capture results through `captures/latest/`
+- review of the most recent OCR overlays through an appropriate OCR debug
+  directory, currently usually `runs/latest_rapidocr/debug/`
 
-## Datei
+## File
 
-- Skript: [hardware/camera_test_server.py](../hardware/camera_test_server.py)
+- Script: [hardware/camera_test_server.py](../hardware/camera_test_server.py)
 
-## Vorbedingungen Auf Dem Pi
+## Prerequisites on the Pi
 
-- mindestens eine Kamera physisch an `CAM0` oder `CAM1` angeschlossen
-- `Picamera2` ist auf dem Pi installiert
-- die Kamera wird vom Pi erkannt
+- at least one camera physically connected to `CAM0` or `CAM1`
+- `Picamera2` installed on the Pi
+- the camera detected by the Pi
 
-Fuer `--mode review` gilt stattdessen:
+For `--mode review`, the requirements are different:
 
-- keine laufende Kamera erforderlich
-- keine `Picamera2`-Abhaengigkeit erforderlich
-- verwendet standardmaessig:
-  - `captures/latest/raw/` fuer `raw images`
-  - `captures/latest/case/` fuer `entzerrte Bilder`
-  - `captures/latest/debug/page_1|page_2/02_enhanced.png` fuer `enhanced images`
-  - `runs/latest/debug/page_1|page_2/06_ocr_overlay.png` oder
-    `runs/latest_rapidocr/debug/page_1|page_2/06_ocr_overlay.png` fuer `OCR overlay`
+- no active camera is required
+- no `Picamera2` dependency is required
+- the default sources are:
+  - `captures/latest/raw/` for `raw images`
+  - `captures/latest/case/` for `rectified images`
+  - `captures/latest/debug/page_1|page_2/02_enhanced.png` for `enhanced images`
+  - `runs/latest/debug/page_1|page_2/06_ocr_overlay.png` or
+    `runs/latest_rapidocr/debug/page_1|page_2/06_ocr_overlay.png` for
+    `OCR overlay`
 
-Wichtiger Treiber-/Overlay-Befund fuer die aktuell verwendete Hardware:
+Important driver and overlay findings for the hardware currently in use:
 
-- Kamera: `Arducam IMX519 16 MP`
-- auf dem aktuellen Pi-Setup war `camera_auto_detect=1` nicht ausreichend
-- verifizierte Konfiguration in `/boot/firmware/config.txt`:
+- camera: `Arducam IMX519 16 MP`
+- `camera_auto_detect=1` was not sufficient on the current Pi setup
+- verified configuration in `/boot/firmware/config.txt`:
 
 ```text
 camera_auto_detect=0
@@ -60,97 +63,101 @@ dtoverlay=imx519,cam0
 dtoverlay=imx519,cam1
 ```
 
-Sinnvolle Kurzpruefung auf dem Pi:
+Useful quick check on the Pi:
 
 ```bash
 rpicam-hello --list-cameras
 ```
 
-Wenn `Picamera2` im System-Python noch fehlt:
+If `Picamera2` is not yet available in the system Python installation:
 
 ```bash
 sudo apt update
 sudo apt install -y python3-picamera2
 ```
 
-Wichtig:
+Important notes:
 
-- auf Raspberry Pi OS ist `Picamera2` oft ueber das System-Python sauberer verfuegbar als in einer isolierten `venv`
-- in der Projekt-`venv` war `picamera2` nicht verfuegbar
-- der verifizierte Testpfad ist deshalb bewusst das System-Python:
+- On Raspberry Pi OS, `Picamera2` is often more reliably available through
+  the system Python installation than through an isolated virtual environment.
+- `picamera2` was not available in the project's `.venv`.
+- The verified test path therefore deliberately uses the system Python:
 
 ```bash
 /usr/bin/python3 hardware/camera_test_server.py ...
 ```
 
-Aktueller Implementierungsstand des Testservers:
+Current implementation details:
 
-- der Server nutzt direkt `Picamera2` mit `JpegEncoder` und `FileOutput`
-- er re-encodiert die Frames nicht mehr ueber `OpenCV`
-- `python3-opencv` ist fuer den aktuellen Kamera-Testserver deshalb nicht mehr erforderlich
+- The server uses `Picamera2` directly with `JpegEncoder` and `FileOutput`.
+- It no longer re-encodes frames through `OpenCV`.
+- Consequently, `python3-opencv` is no longer required by the current camera
+  test server.
 
-## Start Auf Dem Pi
+## Starting the Server on the Pi
 
-### Live-Modus
+### Live mode
 
-Typische Vorschau fuer `CAM0`:
+Typical preview for `CAM0`:
 
 ```bash
 cd ~/src/abr
 /usr/bin/python3 hardware/camera_test_server.py --camera 0 --port 8000 --width 1920 --height 1080
 ```
 
-Typische Vorschau fuer `CAM1`:
+Typical preview for `CAM1`:
 
 ```bash
 cd ~/src/abr
 /usr/bin/python3 hardware/camera_test_server.py --camera 1 --port 8001 --width 1920 --height 1080
 ```
 
-Der Server bindet standardmaessig auf `0.0.0.0`, also auf allen Netzwerkschnittstellen.
+By default, the server binds to `0.0.0.0`, making it available on all network
+interfaces.
 
-Beim Start gibt das Skript unter anderem aus:
+At startup, the script reports information including:
 
-- Kameramodell
-- verwendete Aufloesung
-- Bonjour-Link wie `http://abr.local:8000/`
+- camera model
+- selected resolution
+- a Bonjour URL such as `http://abr.local:8000/`
 
-### Review-Modus
+### Review mode
 
-Gemeinsame Review-Seite:
+Combined review page:
 
 ```bash
 cd ~/src/abr
 /usr/bin/python3 hardware/camera_test_server.py --mode review --port 8010
 ```
 
-Mit initialer Vorauswahl `raw images`:
+With `raw images` selected initially:
 
 ```bash
 /usr/bin/python3 hardware/camera_test_server.py --mode review --port 8010 --review-source raw
 ```
 
-Mit initialer Vorauswahl `enhanced images`:
+With `enhanced images` selected initially:
 
 ```bash
 /usr/bin/python3 hardware/camera_test_server.py --mode review --port 8010 --review-source enhanced
 ```
 
-Abweichendes Capture-Session-Verzeichnis:
+Using a different capture session directory:
 
 ```bash
 /usr/bin/python3 hardware/camera_test_server.py --mode review --port 8010 --capture-session-dir captures/latest
 ```
 
-Abweichendes OCR-Debug-Verzeichnis, z. B. fuer den schlanken RapidOCR-Wrapper:
+Using a different OCR debug directory, for example for the lightweight
+RapidOCR wrapper:
 
 ```bash
 /usr/bin/python3 hardware/camera_test_server.py --mode review --port 8010 --ocr-debug-dir runs/latest_rapidocr/debug
 ```
 
-## Zugriff Vom Mac
+## Access from a Mac
 
-Im Browser auf dem Mac oeffnen:
+Open the following addresses in a browser on the Mac:
 
 ```text
 http://abr.local:8000/
@@ -158,122 +165,135 @@ http://abr.local:8001/
 http://abr.local:8010/
 ```
 
-Alternativ statt `abr.local` die IP-Adresse des Pi verwenden.
+Alternatively, replace `abr.local` with the Pi's IP address.
 
-## Verhalten
+## Behavior
 
-Standardverhalten des Skripts:
+Default script behavior:
 
-- verwendet Kameraindex `0`
-- waehlt ohne Zusatzparameter die groesste gefundene Sensoraufloesung
-- streamt das Bild als `MJPEG`
-- aktualisiert so schnell, wie Kamera, JPEG-Encoding und Netzwerk es hergeben
+- uses camera index `0`
+- selects the largest detected sensor resolution unless an explicit size is
+  provided
+- streams the image as `MJPEG`
+- updates as quickly as the camera, JPEG encoding, and network permit
 
-Im `review`-Modus:
+In `review` mode, the script:
 
-- liest das Skript bei jeder Statusabfrage den aktuellen Stand unter
-  `captures/latest/` und dem jeweils konfigurierten OCR-Debug-Verzeichnis
-- zeigt immer genau zwei Bilder untereinander an
-- schaltet oben per Radio-Buttons zwischen vier Quellen um:
+- reads the current state below `captures/latest/` and the configured OCR
+  debug directory for every status request
+- always displays exactly two images, one below the other
+- switches between four sources using radio buttons at the top:
   - `raw`
   - `rectified`
   - `enhanced`
   - `ocr-overlay`
-- verwendet fuer `raw` die unverzerrten Kamerabilder aus `raw/`
-- verwendet fuer `rectified` die entzerrten `case/left.jpg` und `right.jpg`
-- verwendet fuer `enhanced` die von `capture_double_page` oder
-  `enhance_for_ocr.py` erzeugten `02_enhanced.png`
-- verwendet fuer `ocr-overlay` die von `run_fallback_pipeline.py` erzeugten
-  `06_ocr_overlay.png`; das kann aus `run_fallback_pipeline.py` oder aus
-  `hardware/run_rapidocr.py` stammen
-- aktualisiert die Browseransicht automatisch, sobald eine neue Aufnahme
-  oder ein neuer OCR-Lauf neue Overlays geschrieben hat
-- zeigt unterhalb der Bilder fuer die aktuell gewaehlte Quelle auch die
-  konkreten linken/rechten Dateipfade und fehlende Dateien an; damit laesst
-  sich ein Pfadproblem bei `ocr-overlay` direkt im Browser erkennen
+- uses the undistorted camera images from `raw/` for `raw`
+- uses the rectified `case/left.jpg` and `case/right.jpg` for `rectified`
+- uses `02_enhanced.png`, generated by `capture_double_page` or
+  `enhance_for_ocr.py`, for `enhanced`
+- uses `06_ocr_overlay.png`, generated by `run_fallback_pipeline.py`, for
+  `ocr-overlay`; it may originate from either `run_fallback_pipeline.py` or
+  `hardware/run_rapidocr.py`
+- refreshes the browser view automatically when a new capture or OCR run
+  writes new overlays
+- displays the concrete left and right file paths, as well as missing files,
+  below the images for the selected source; this makes an `ocr-overlay` path
+  problem directly visible in the browser
 
-Praktische Empfehlung fuer den ersten Live-Test:
+For the first live test:
 
-- nicht sofort Vollaufloesung verwenden
-- fuer die `IMX519` ist `1920x1080` ein guter Startpunkt fuer fluessige Vorschau
-- die vom Pi gemeldete Vollaufloesung `4656x3496` ist fuer MJPEG-Livebild moeglich, aber deutlich langsamer
+- do not start at full resolution
+- `1920x1080` is a good starting point for a responsive preview with the
+  `IMX519`
+- the Pi-reported full resolution of `4656x3496` works for an MJPEG live view
+  but is considerably slower
 
-Zusaetzliche Endpunkte:
+Additional endpoints:
 
 - `/snapshot.jpg`
 - `/status.json`
 - `/review-status.json`
 
-Ein Snapshot laesst sich damit direkt vom Mac abspeichern, z. B.:
+For example, snapshots can be saved directly from the Mac:
 
 ```bash
 curl http://abr.local:8000/snapshot.jpg -o calibration/shots/cam0_charuco_01.jpg
 curl http://abr.local:8001/snapshot.jpg -o calibration/shots/cam1_charuco_01.jpg
 ```
 
-Fuer die Kamera-Justage kann das Browserbild optional mit einem Fadenkreuz in der Bildmitte ueberlagert werden.
-Der Server-Start mit `--crosshair` blendet es initial ein; auf der Seite selbst laesst es sich dann per Checkbox ein- und ausblenden.
+For camera alignment, an optional crosshair can be overlaid at the center of
+the browser image. Starting the server with `--crosshair` enables it initially;
+it can then be toggled on the page using a checkbox.
 
-## Optionale Parameter
+## Optional Parameters
 
 ```bash
 /usr/bin/python3 hardware/camera_test_server.py --camera 0 --port 8000 --width 2304 --height 1296
 ```
 
-Wichtige Optionen:
+Important options:
 
-- `--mode`: `live` oder `review`
-- die alten Namen `capture-review`, `ocr-review` und `ocr-words-review`
-  bleiben als Start-Aliasse fuer `review` erhalten
-- `--camera`: Kameraindex, z. B. `0`
-- `--host`: Bind-Adresse, Standard `0.0.0.0`
-- `--port`: HTTP-Port, Standard `8000`
-- `--width` und `--height`: explizite Zielaufloesung statt Vollaufloesung
-- `--crosshair`: Fadenkreuz im Browserbild initial einblenden
-- `--frame-timeout`: maximale Zeit ohne neues JPEG-Frame, Standard `3.0`
-- `--jpeg-quality`: JPEG-Qualitaet, Standard `90`
-- `--capture-session-dir`: Capture-Quelle fuer `--mode review`, Standard `captures/latest`
-- `--ocr-debug-dir`: OCR-Overlay-Quelle fuer `--mode review`, Standard `runs/latest/debug`;
-  fuer den aktuellen Pi-Standardlauf meist `runs/latest_rapidocr/debug`
-- `--review-source`: initiale Auswahl `raw`, `rectified`, `enhanced` oder `ocr-overlay`
-- `--ocr-stage`: veraltete Restoption aus dem frueheren `ocr-review`-Modus; wird ignoriert
+- `--mode`: `live` or `review`
+- the legacy names `capture-review`, `ocr-review`, and `ocr-words-review`
+  remain available as aliases that start `review`
+- `--camera`: camera index, for example `0`
+- `--host`: bind address, default `0.0.0.0`
+- `--port`: HTTP port, default `8000`
+- `--width` and `--height`: explicit target resolution instead of full
+  resolution
+- `--crosshair`: initially display the crosshair in the browser image
+- `--frame-timeout`: maximum time without a new JPEG frame, default `3.0`
+- `--jpeg-quality`: JPEG quality, default `90`
+- `--capture-session-dir`: capture source for `--mode review`, default
+  `captures/latest`
+- `--ocr-debug-dir`: OCR overlay source for `--mode review`, default
+  `runs/latest/debug`; usually `runs/latest_rapidocr/debug` for the current
+  standard Pi workflow
+- `--review-source`: initial selection: `raw`, `rectified`, `enhanced`, or
+  `ocr-overlay`
+- `--ocr-stage`: obsolete compatibility option from the former `ocr-review`
+  mode; ignored
 
-Volle Sensoraufloesung mit Fadenkreuz:
+Full sensor resolution with a crosshair:
 
 ```bash
 /usr/bin/python3 hardware/camera_test_server.py --camera 0 --port 8000 --crosshair
 /usr/bin/python3 hardware/camera_test_server.py --camera 1 --port 8001 --crosshair
 ```
 
-Die Vollaufloesung der aktuell verwendeten `IMX519` liegt bei:
+The full resolution of the `IMX519` cameras currently in use is:
 
 - `4656 x 3496`
 
-## Erwartete Nutzung
+## Intended Use
 
-Der Testserver ist bewusst nur ein Diagnosewerkzeug fuer den Hardwareaufbau:
+The test server is deliberately limited to diagnostics during hardware setup:
 
-- Bildausschnitt pruefen
-- Schaerfe pruefen
-- Belichtung und Licht testen
-- Fokus und Verzeichnung beurteilen
-- `ChArUco`-Kalibrierbilder als Einzel-Snapshot aufnehmen
-- letzte entzerrte Capture-Ergebnisse ohne separaten Datei-Download im Browser vergleichen
-- die OCR-Vorverarbeitung je Seite direkt auf den echten Debug-Artefakten im Browser vergleichen
-- das backend-unabhaengige OCR-Text-Overlay aus `06_ocr_overlay.png` fuer beide Seiten direkt im Browser vergleichen
+- check framing
+- check sharpness
+- test exposure and lighting
+- assess focus and distortion
+- capture individual `ChArUco` calibration snapshots
+- compare the latest rectified capture results in the browser without
+  downloading files separately
+- compare per-page OCR preprocessing directly from the actual debug artifacts
+  in the browser
+- compare the backend-independent OCR text overlay from
+  `06_ocr_overlay.png` for both pages directly in the browser
 
-Er ist kein Bestandteil der spaeteren produktiven OCR-/TTS-Pipeline.
+It is not part of the production OCR/TTS pipeline.
 
-## Hilfreiche Kamera-Basischecks
+## Useful Basic Camera Checks
 
-Bevor ein Python-Problem gesucht wird, zuerst den nackten Kamera-Stack pruefen:
+Before investigating a Python problem, check the basic camera stack directly:
 
 ```bash
 rpicam-hello --list-cameras
 rpicam-hello -t 15000 -n
 ```
 
-Hinweis fuer den `Raspberry Pi 5`:
+Note for the `Raspberry Pi 5`:
 
-- `rpicam-vid -o test.h264` ist kein guter Basischeck fuer dieses Projekt, wenn nur der H.264-Codec-Pfad scheitert
-- fuer die reine Kamerapruefung ist `rpicam-hello -t 15000 -n` aussagekraeftiger
+- `rpicam-vid -o test.h264` is not a useful basic check for this project if
+  only the H.264 codec path fails.
+- For a camera-only check, `rpicam-hello -t 15000 -n` is more informative.

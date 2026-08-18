@@ -1,70 +1,72 @@
-# Nutzerstatistik
+# Usage Statistics
 
-Stand: `2026-08-07`
+Last reviewed: `2026-08-07`
 
-## Zweck und Zeitraum
+Deutsche Fassung: [Nutzerstatistik](../docs_DE/USAGE_STATISTICS.md)
 
-Die Geraeteruntime erfasst die Nutzung buchweise. Ein Statistiktag beginnt in
-der Zeitzone `Europe/Berlin` um `04:00` Uhr und endet am Folgetag unmittelbar
-vor `04:00` Uhr.
+## Purpose and Reporting Period
 
-Pro Buch werden erfasst:
+The device runtime records usage per book. In the `Europe/Berlin` time zone,
+a reporting day starts at `04:00` and ends immediately before `04:00` the
+following day.
 
-- Anzahl erfolgreich ingestierter Seiten
-- tatsaechliche Dauer der Wiedergabe von Seiten- und Zusammenfassungsaudio
-- Anzahl Nutzungen der Kapitel-/Letzte-Seiten-Zusammenfassung
-- Anzahl Nutzungen von `Was bisher geschah`
+The following values are recorded for each book:
 
-Systemhinweise und Signalklaenge wie `bing.wav` zaehlen nicht zur Vorlesezeit.
-Ein wegen des inkrementellen Ablaufs mehrfach gemeldetes Seitenartefakt wird
-ueber `scan_id` und `page_id` innerhalb derselben Statistikperiode nur einmal
-gezaehlt. Ein neuer Scan derselben Buchseite zaehlt dagegen erneut.
+- number of successfully ingested pages
+- actual playback duration of page and summary audio
+- number of chapter/latest-pages summary requests
+- number of story-so-far summary requests
 
-## Speicherung und Ausfallsicherheit
+System prompts and signal sounds such as `bing.wav` do not count as reading
+time. During incremental processing, the same page artifact may be reported
+more than once; `scan_id` and `page_id` ensure that it is counted only once
+within a reporting period. A new scan of the same book page counts again.
 
-Der laufende Zustand liegt unter:
+## Storage and Failure Safety
+
+The current state is stored in:
 
 ```text
 library/usage_statistics/current.json
 ```
 
-Zugriffe aus Audio- und Ingest-Threads sowie aus dem Report-Prozess sind per
-Thread-Lock und Dateisperre serialisiert. Die JSON-Datei wird atomar ersetzt.
-Ein Fehler der Statistik wird geloggt, unterbricht aber nicht die eigentliche
-Geraetefunktion.
+Access from audio and ingest threads, as well as from the reporting process,
+is serialized with a thread lock and file lock. The JSON file is replaced
+atomically. Statistics errors are logged but do not interrupt the device's
+primary function.
 
-Um `04:00` startet `abr-usage-report.timer` den einmaligen Dienst
-`abr-usage-report.service`. Dieser sendet alle abgeschlossenen, noch nicht
-versandten Perioden an den in `mail.ini` konfigurierten Empfaenger. Erst nach erfolgreichem SMTP-
-Versand wird eine Periode aus `current.json` entfernt und abgelegt unter:
+At `04:00`, `abr-usage-report.timer` starts the one-shot
+`abr-usage-report.service`. It sends every completed reporting period that has
+not yet been delivered to the recipient configured in `mail.ini`. A period is
+removed from `current.json` and stored under the following path only after a
+successful SMTP delivery:
 
 ```text
 library/usage_statistics/archive/YYYY-MM-DD.json
 ```
 
-Seit dem Stand vom `2026-08-07` wird fuer jede abgeschlossene Periode ein
-Bericht versendet, auch wenn das Geraet gar nicht benutzt wurde. Ein solcher
-Bericht enthaelt `Keine Nutzung erfasst.` und Gesamtwerte von null. Auch leere
-Perioden erhalten nach erfolgreichem Versand eine Archivdatei. Dadurch wird
-derselbe Nullbericht bei einem manuellen zweiten Dienstlauf nicht erneut
-verschickt. Nach einer mehrtaegigen Abschaltung werden noch nicht archivierte
-Perioden der Reihe nach nachgeholt.
+Since the `2026-08-07` version, a report is sent for every completed period,
+even when the device was not used. Such a report contains
+`Keine Nutzung erfasst.` and totals of zero. Empty periods also receive an
+archive file after successful delivery, preventing the same zero-usage report
+from being sent again by a second manual service run. After the device has
+been off for several days, periods that have not yet been archived are caught
+up in chronological order.
 
-Schlaegt der Versand fehl oder ist der Pi um `04:00` ausgeschaltet, bleiben
-die Daten erhalten. Durch `Persistent=true` holt systemd den Lauf nach; ein
-spaeterer Lauf versendet weiterhin alle noch offenen abgeschlossenen
-Perioden.
+If delivery fails or the Pi is switched off at `04:00`, the data is retained.
+With `Persistent=true`, systemd catches up on the missed run; a later run still
+sends every outstanding completed period.
 
-## Installation auf dem Raspberry Pi
+## Installation on the Raspberry Pi
 
-Voraussetzungen:
+Prerequisites:
 
-- das Projekt liegt wie bisher unter `~/src/abr`
-- die virtuelle Umgebung `~/src/abr/.venv` existiert
-- der vorhandene Mail-Account ist in `~/.config/abr/mail.ini` eingerichtet
-- die aktuelle Projektversion wurde auf den Pi uebertragen
+- the project is located at `~/src/abr`
+- the virtual environment `~/src/abr/.venv` exists
+- the existing mail account is configured in `~/.config/abr/mail.ini`
+- the current project version has been transferred to the Pi
 
-Installation:
+Install:
 
 ```bash
 cd ~/src/abr
@@ -72,34 +74,33 @@ timedatectl status
 sudo deploy/install_usage_statistics.sh
 ```
 
-Bei `Time zone` muss `Europe/Berlin` stehen. Falls nicht:
+`Time zone` must show `Europe/Berlin`. Otherwise, set it with:
 
 ```bash
 sudo timedatectl set-timezone Europe/Berlin
 ```
 
-Das Skript setzt den aktuellen Benutzer, Repo-, Python-, Bibliotheks- und
-Mailkonfigurationspfad in die Unit ein, installiert beide systemd-Dateien und
-aktiviert den Timer sofort.
+The installer substitutes the current user and the repository, Python,
+library, and mail-configuration paths into the unit, installs both systemd
+files, and enables the timer immediately.
 
-Danach den Control-Panel-Dienst neu starten, damit die Runtime die neuen
-Zaehler verwendet:
+Then restart the control-panel service so the runtime uses the new counters:
 
 ```bash
 sudo systemctl restart abr-control-panel.service
 ```
 
-Timer kontrollieren:
+Inspect the timer:
 
 ```bash
 systemctl status abr-usage-report.timer
 systemctl list-timers abr-usage-report.timer
 ```
 
-## Manueller Test
+## Manual Test
 
-Sobald erste Nutzungsdaten erfasst wurden, kann sofort eine Vorschau-Mail
-gesendet werden. Sie veraendert oder archiviert die laufenden Zaehler nicht:
+As soon as usage data exists, a preview e-mail can be sent immediately. It
+does not change or archive the current counters:
 
 ```bash
 cd ~/src/abr
@@ -109,16 +110,15 @@ cd ~/src/abr
   --preview-current
 ```
 
-Die regulaere Ausfuehrung versendet abgeschlossene Perioden einschliesslich
-Perioden ohne Nutzung. Der systemd-Dienst kann nach dem naechsten
-Periodenwechsel manuell gestartet werden:
+A regular run sends completed periods, including periods without usage. The
+systemd service can be started manually after the next reporting boundary:
 
 ```bash
 sudo systemctl start abr-usage-report.service
 journalctl -u abr-usage-report.service -n 100 --no-pager
 ```
 
-Alternativ laesst sich derselbe regulaere Lauf direkt ausfuehren:
+Alternatively, run the same regular operation directly:
 
 ```bash
 .venv/bin/python -m abr.usage_report \
@@ -126,12 +126,12 @@ Alternativ laesst sich derselbe regulaere Lauf direkt ausfuehren:
   --config ~/.config/abr/mail.ini
 ```
 
-Statistikdatei ansehen:
+Inspect the statistics file:
 
 ```bash
 python -m json.tool library/usage_statistics/current.json
 ```
 
-Bei einem erfolgreichen Versand erscheint im Journal die gesendete
-Periodenkennung und der Archivpfad. Bei einem SMTP-Fehler endet der Dienst mit
-Fehlerstatus; die Periode bleibt fuer den naechsten Versuch erhalten.
+After a successful delivery, the journal reports the period identifier and
+archive path. On an SMTP error, the service exits with a failure status and
+the period remains available for the next attempt.

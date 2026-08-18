@@ -1,144 +1,146 @@
 # Control Panel Architecture
 
-Stand: `2026-08-01`
+Last reviewed: `2026-08-01`
 
-## Ziel
+Deutsche Fassung: [Bedienpanel-Architektur](../docs_DE/CONTROL_PANEL_ARCHITECTURE.md)
 
-Die Bedienlogik des ABR-Geraets soll dauerhaft auf dem `Raspberry Pi 5` laufen
-und dabei:
+## Goal
 
-- Taster und `EC11` permanent ueberwachen
-- Hardwareereignisse von der fachlichen Logik trennen
-- auch waehrend Capture, OCR, TTS und NFC reaktionsfaehig bleiben
+The ABR device's control logic is designed to run continuously on the
+`Raspberry Pi 5` while:
 
-## Tatsachlich implementierte Struktur
+- monitoring the buttons and `EC11` at all times
+- separating hardware events from application logic
+- remaining responsive during capture, OCR, TTS, and NFC operations
 
-Der aktuelle Pi-Pfad besteht aus vier klar getrennten Schichten:
+## Implemented Structure
+
+The current Raspberry Pi path consists of four clearly separated layers:
 
 1. `GPIO backend`
-   - direkter GPIO-Zugriff ueber `RPi.GPIO` auf Basis von `rpi-lgpio`
-   - Fallback fuer Tests: `pinctrl`
+   - direct GPIO access through `RPi.GPIO`, based on `rpi-lgpio`
+   - test fallback: `pinctrl`
 2. `FrontPanelMonitor`
-   - Taster-Polling in einem langlebigen Thread
-   - GPIO-Flankeninterrupts fuer beide EC11-Kanaele mit `rpi-gpio`
-   - entprellt Taster
-   - dekodiert den `EC11`
-   - erzeugt nur Hardwareevents
+   - button polling in a long-lived thread
+   - GPIO edge interrupts for both EC11 channels with `rpi-gpio`
+   - button debouncing
+   - `EC11` decoding
+   - hardware-event generation only
 3. `Action Router`
-   - uebersetzt Hardwareevents in fachliche Aktionen
-   - erkennt auch die Dreifachtaste fuer den Buch-Loeschdialog
+   - translates hardware events into application actions
+   - also detects the three-button combination that opens the book deletion
+     dialog
 4. `Runtime Controller`
-   - verarbeitet Aktionen
-   - steuert Jobs, Audio, Buchkontext und Fehlerpfade
+   - processes actions
+   - controls jobs, audio, book context, and error paths
 
-## Interrupts fuer den EC11, Polling fuer Taster
+## EC11 Interrupts and Button Polling
 
-Der EC11 verwendet mit dem produktiven `rpi-gpio`-Backend Flankeninterrupts
-auf Kanal A und B. Der Callback liest beide Pegel als gemeinsamen Snapshot
-und fuehrt nur zeitkritische, nicht blockierende Arbeit aus:
+With the production `rpi-gpio` backend, the EC11 uses edge interrupts on
+channels A and B. The callback reads both signal levels as one snapshot and
+performs only time-critical, non-blocking work:
 
-- Quadraturdecoder aktualisieren
-- threadsicheren Lautstaerke-Sollwert im Speicher veraendern
-- normales Encoder-Event fuer Logging und Mixer-Synchronisation einreihen
+- update the quadrature decoder
+- change the thread-safe target volume held in memory
+- enqueue a regular encoder event for logging and mixer synchronization
 
-Im Interrupt werden weder `amixer` noch Audio- oder andere Subprozesse
-gestartet. Das verhindert lange Callback-Laufzeiten. Mechanische Taster
-bleiben beim bewaehrten Polling mit Debounce. Falls nur `pinctrl` verfuegbar
-ist, arbeitet auch der Encoder weiter per Polling; die Sollwertvariable wird
-dann direkt im Monitor-Thread aktualisiert.
+The interrupt does not start `amixer`, audio, or any other subprocesses. This
+prevents long callback execution times. Mechanical buttons continue to use
+the proven polling and debounce mechanism. If only `pinctrl` is available,
+the encoder also continues to work through polling; the monitor thread then
+updates the target-volume variable directly.
 
-- Taster: Polling mit Debounce
-- Encoder: Flankeninterrupt mit Quadratur-Dekodierung, Polling-Fallback
-- Fachlogik: weiterhin nach Event-Uebersetzung; nur der atomare Sollwert wird
-  bereits im Callback veraendert
+- buttons: polling with debounce
+- encoder: edge interrupts with quadrature decoding and a polling fallback
+- application logic: still runs after event translation; only the atomic
+  target value is changed inside the callback
 
-## Polling-Fallback
+## Polling Fallback
 
-Der Monitor arbeitet mit zwei Taktbereichen:
+The monitor uses two timing ranges:
 
-- Leerlauf: `2.0 ms`
-- waehrend Encoder-Aktivitaet: `0.5 ms`
+- idle: `2.0 ms`
+- during encoder activity: `0.5 ms`
 - `encoder_active_hold_ms`: `25 ms`
-- Button-Debounce: `25 ms`
+- button debounce: `25 ms`
 
-Diese schnellen Intervalle gelten fuer Taster-Snapshots und als
-Encoder-Fallback. Bei aktivem GPIO-Interrupt werden Encoderpegel nicht
-zusaetzlich im Pollingpfad dekodiert.
+These short intervals apply to button snapshots and the encoder fallback.
+When GPIO interrupts are active, encoder levels are not decoded again through
+the polling path.
 
-## Aktuell verdrahtete Bedienlogik
+## Current Control Assignments
 
 ### `Start / Stop / NFC`
 
-- startet den echten Lauf `capture -> Bildvorbereitung -> OCR -> page-ingest`
-- stoppt einen laufenden foreground job
-- stoppt eine laufende Seitenausgabe
-- stoppt auch den reinen Heartbeat-Wartezustand
+- starts the real `capture -> image preparation -> OCR -> page ingest` run
+- stops an active foreground job
+- stops active page playback
+- also stops a heartbeat-only waiting state
 
 ### `EC11`
 
-- veraendert die Lautstaerke direkt
-- funktioniert auch waehrend laufender Seiten- und Systemaudioausgabe wie
+- changes the volume directly
+- remains operational during page and system-audio playback, including
   `bing.wav`
-- der Interrupt aktualisiert nur den Sollwert; Mixerzugriff, Logging und
-  sonstige Subprozesse laufen weiterhin ausserhalb des Callbacks
-- die eigentliche WAV-Wiedergabe fragt den Sollwert blockweise ab; Details zu
-  Pufferung und Underrun-Schutz stehen in
-  [CONTROL_RUNTIME_ARCHITECTURE.md](../docs/CONTROL_RUNTIME_ARCHITECTURE.md)
+- the interrupt updates only the target value; mixer access, logging, and
+  other subprocesses continue to run outside the callback
+- WAV playback itself checks the target value block by block; buffering and
+  underrun protection are described in
+  [CONTROL_RUNTIME_ARCHITECTURE.md](CONTROL_RUNTIME_ARCHITECTURE.md)
 
-### `EC11-Taster`
+### `EC11 button`
 
-- aktuell produktiv nur fuer den Buch-Loeschdialog genutzt
+- currently used in production only by the book deletion dialog
 
-### Dreifachtaste
+### Three-button combination
 
-Die gleichzeitige Betaetigung aus:
+Simultaneously pressing:
 
 - `Start / Stop / NFC`
-- `Buch-Zusammenfassung`
-- `Kapitel-/Letzte-Seiten-Zusammenfassung`
+- `Book summary`
+- `Chapter/latest-pages summary`
 
-startet den Buch-Loeschdialog.
+opens the book deletion dialog.
 
-## Produktiv verdrahtete Summary-Tasten
+## Production Summary Buttons
 
-### `Kapitel-/Letzte-Seiten-Zusammenfassung`
+### `Chapter/latest-pages summary`
 
-- spielt zuerst `kapitel_zusammenfassen`
-- startet danach einen `bing`-Heartbeat bis die Audioausgabe startet
-- zieht zunaechst neu abschliessbare Abschnitte nach und prueft danach den
-  Text ab der persistenten offenen Abschnittsgrenze
-- kombiniert offenen Text mit der letzten verfuegbaren
-  Abschnittszusammenfassung zu einer temporaeren Rueckschau
-- fasst vor dem ersten fertigen Abschnitt den offenen Text allein zusammen
-- speichert diese temporaere Rueckschau nicht
-- ohne offenen Text holt sie weiterhin die letzte verfuegbare
-  Abschnittszusammenfassung und kann diese bei Bedarf ueber Gemini erzeugen
-  oder aktualisieren
+- first plays `kapitel_zusammenfassen`
+- then starts a `bing` heartbeat until audio playback begins
+- first assembles any sections that can now be completed, then examines the
+  text from the persistent open-section boundary
+- combines open text with the most recent available section summary to create
+  a temporary recap
+- before the first completed section, summarizes the open text by itself
+- does not persist this temporary recap
+- when there is no open text, continues to retrieve the latest available
+  section summary and can generate or refresh it through Gemini as needed
 
-### `Buch-Zusammenfassung`
+### `Book summary`
 
-- spielt zuerst `buch_zusammenfassen`
-- startet danach einen `bing`-Heartbeat bis die Audioausgabe startet
-- erzeugt auf Basis aller vorhandenen Abschnittszusammenfassungen ein
-  aktuelles "Was bisher geschah"
+- first plays `buch_zusammenfassen`
+- then starts a `bing` heartbeat until audio playback begins
+- creates an up-to-date “story so far” recap from all available section
+  summaries
 
-### Fehlender Summary-Inhalt
+### Missing Summary Content
 
-- nur wenn weder ein abgeschlossener Abschnitt noch offener Text vorliegt,
-  spielt die Runtime `keine_zusammenfassung`
+- the runtime plays `keine_zusammenfassung` only when neither a completed
+  section nor open text is available
 
-## Relevante Dateien
+## Relevant Files
 
 - [abr/hardware/control_panel.py](../abr/hardware/control_panel.py)
 - [abr/control/frontpanel.py](../abr/control/frontpanel.py)
 - [abr/control/runtime.py](../abr/control/runtime.py)
 - [hardware/control_panel_service.py](../hardware/control_panel_service.py)
 
-## Naechster sinnvoller Ausbau
+## Next Practical Improvements
 
-Auf Ebene des Bedienpanels ist der naechste sinnvolle Schritt nicht mehr die
-Grundverdrahtung, sondern Feinschliff und Betriebsreife:
+At the control-panel level, the next useful work is no longer basic wiring but
+refinement and operational readiness:
 
-1. Summary-Heartbeat und Fehlermeldungen mit echtem Pi-Betrieb weiter testen
-2. Status-/Telemetry-Ereignisse fuer Abschnitt und Summary ergaenzen
-3. spaeter `systemd`-Start fuer den Runtime-Dienst
+1. Continue testing the summary heartbeat and error messages on the actual Pi.
+2. Add status or telemetry events for section and summary processing.
+3. Add `systemd` startup for the runtime service at a later stage.

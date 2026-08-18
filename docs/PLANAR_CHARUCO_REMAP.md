@@ -1,52 +1,61 @@
 # Planar ChArUco Remap
 
-Stand: `2026-06-26`
+Last reviewed: `2026-06-26`
 
-## Zweck
+Deutsche Fassung: [Planarer ChArUco-Remap](../docs_DE/PLANAR_CHARUCO_REMAP.md)
 
-Dieses Werkzeug erzeugt aus genau einem `ChArUco`-Kalibrierbild eine glatte Vollbild-Entzerrung fuer eine starre Kamera.
+## Purpose
 
-Dateien:
+This tool uses exactly one `ChArUco` calibration image to generate a smooth,
+full-frame rectification map for a fixed camera.
+
+Files:
 
 - [calibration/calibrate_planar_charuco.py](../calibration/calibrate_planar_charuco.py)
 - [calibration/apply_saved_remap.py](../calibration/apply_saved_remap.py)
 
-## Wann Dieser Pfad Sinnvoll Ist
+## When to Use This Approach
 
-Dieser Pfad ist fuer ABR dann besser als eine klassische Mehrbild-Kamerakalibrierung, wenn:
+For ABR, this path is preferable to conventional multi-image camera
+calibration when:
 
-- die Kamera mechanisch starr bleibt
-- der Kameraaufbau spaeter nicht mehr veraendert wird
-- aus einem einzelnen Referenzbild eine praktikable Vollbild-Entzerrung benoetigt wird
+- the camera remains mechanically fixed
+- the camera assembly will not be changed afterward
+- practical full-frame rectification is required from a single reference
+  image
 
-Das passt zum Scanner-Aufbau mit fester Kamera besser als der fruehere stueckweise Planar-Warp.
+This is a better fit for the scanner's fixed camera assembly than the earlier
+piecewise planar warp.
 
-Der aktuell verifizierte Projektstand ist:
+The currently verified project state is:
 
-- `cam0` und `cam1` sind mechanisch justiert
-- beide Kameras besitzen eine gespeicherte aktuelle Remap
-- diese Remaps sind die bevorzugte Basis fuer reale Scannerbilder
+- `cam0` and `cam1` are mechanically aligned
+- a current remap is stored for each camera
+- these remaps are the preferred basis for actual scanner images
 
-## Prinzip
+## Principle
 
-Das Skript:
+The script:
 
-1. erkennt `ArUco`-Marker und `ChArUco`-Ecken im Kalibrierbild
-2. bestimmt daraus ein globales Kameramodell mit radialer Verzeichnung
-3. entzerrt das ganze Bild glatt mit `OpenCV`
-4. richtet optional die Bildebene perspektivisch zu einem echten Rechteck aus
-5. schreibt die gespeicherte Remap und die Vorschau
+1. detects `ArUco` markers and `ChArUco` corners in the calibration image
+2. derives a global camera model with radial distortion
+3. smoothly undistorts the entire image with `OpenCV`
+4. optionally rectifies the image plane into a true rectangle using a
+   perspective transform
+5. writes the saved remap and preview images
 
-Der wichtige Unterschied:
+The important differences are:
 
-- kein stueckweiser Dreiecks-Warp
-- keine lokalen Knicke zwischen Kontrollpunkten
-- die Zwischenraeume werden genauso glatt entzerrt wie die Marker selbst
-- die verbleibende Trapezform des schraeg aufgenommenen Plans kann zusaetzlich entfernt werden
+- no piecewise triangular warp
+- no local discontinuities between control points
+- areas between markers are rectified just as smoothly as the markers
+  themselves
+- the remaining trapezoidal shape of the obliquely photographed board can
+  also be removed
 
-## Voraussetzungen
+## Prerequisites
 
-Auf dem Mac in der lokalen `venv`:
+In the local virtual environment on the Mac:
 
 ```bash
 cd ~/src/abr
@@ -54,9 +63,9 @@ source .venv/bin/activate
 pip install opencv-contrib-python numpy
 ```
 
-## Remap Aus Einem Kalibrierbild Erzeugen
+## Generate a Remap from One Calibration Image
 
-Beispiel fuer das bereits aufgenommene Bild `cam1_charuco_01.jpg`:
+Example using the existing `cam1_charuco_01.jpg` image:
 
 ```bash
 python calibration/calibrate_planar_charuco.py \
@@ -67,14 +76,14 @@ python calibration/calibrate_planar_charuco.py \
   --preview-width 1600
 ```
 
-Das Skript schreibt:
+The script writes:
 
 - `calibration/out/cam1_planar.npz`
 - `calibration/out/cam1_planar.json`
 - `calibration/out/cam1_planar_rectified.jpg`
 - `calibration/out/cam1_planar_detected.jpg`
 
-Analoger Aufruf fuer `cam0`:
+Equivalent command for `cam0`:
 
 ```bash
 python calibration/calibrate_planar_charuco.py \
@@ -85,7 +94,7 @@ python calibration/calibrate_planar_charuco.py \
   --preview-width 1600
 ```
 
-Wenn du weniger schwarze Randflaechen willst und dafuer mehr beschneiden akzeptierst:
+To reduce black border areas while accepting more cropping:
 
 ```bash
 python calibration/calibrate_planar_charuco.py \
@@ -96,7 +105,7 @@ python calibration/calibrate_planar_charuco.py \
   --crop-valid
 ```
 
-Wenn du nur die Linsenentzerrung willst und die Perspektive bewusst nicht begradigen willst:
+To apply lens undistortion only and deliberately retain perspective:
 
 ```bash
 python calibration/calibrate_planar_charuco.py \
@@ -106,7 +115,7 @@ python calibration/calibrate_planar_charuco.py \
   --no-perspective-rectify
 ```
 
-## Remap Auf Ein Bild Anwenden
+## Apply a Remap to an Image
 
 ```bash
 python calibration/apply_saved_remap.py \
@@ -115,7 +124,7 @@ python calibration/apply_saved_remap.py \
   --output calibration/out/cam1_charuco_01_rectified.jpg
 ```
 
-Beispiel fuer einen realen Scan von `cam0`:
+Example using an actual `cam0` scan:
 
 ```bash
 python calibration/apply_saved_remap.py \
@@ -124,12 +133,15 @@ python calibration/apply_saved_remap.py \
   --output testdata/scans0/cam0_0001_rectified.jpg
 ```
 
-Wenn die angegebene Remap-Datei noch nicht existiert, erzeugt `apply_saved_remap.py` sie jetzt automatisch, sofern:
+If the specified remap does not exist yet, `apply_saved_remap.py` now creates
+it automatically, provided that:
 
-- das passende Kalibrierbild vorhanden ist, z. B. `calibration/shots/cam0_charuco_01.jpg`
-- das Board-JSON vorhanden ist oder automatisch als `charuco_160x240.json` erzeugt werden kann
+- the matching calibration image exists, for example
+  `calibration/shots/cam0_charuco_01.jpg`
+- the board JSON exists or can be generated automatically as
+  `charuco_160x240.json`
 
-Damit reicht fuer den Standardpfad oft direkt:
+For the standard path, this command is therefore often sufficient:
 
 ```bash
 python calibration/apply_saved_remap.py \
@@ -138,7 +150,7 @@ python calibration/apply_saved_remap.py \
   --output testdata/scans0/cam0_0001_rectified.jpg
 ```
 
-Explizites Kalibrierbild bleibt optional moeglich:
+An explicit calibration image remains optional:
 
 ```bash
 python calibration/apply_saved_remap.py \
@@ -148,12 +160,12 @@ python calibration/apply_saved_remap.py \
   --calibration-image calibration/shots/cam0_charuco_01.jpg
 ```
 
-## Hinweise
+## Notes
 
-- das `ChArUco`-Board sollte moeglichst plan sein
-- der Kameraaufbau darf nach der Kalibrierung nicht mehr veraendert werden
-- wenn spaeter Fokus, Kamerawinkel oder Hoehe geaendert werden, muss die Remap neu erzeugt werden
-- die Remap gilt fuer diese Kamera und diesen mechanischen Aufbau
-- aktuelle Remaps:
+- Keep the `ChArUco` board as flat as possible.
+- Do not change the camera assembly after calibration.
+- Regenerate the remap if focus, camera angle, or camera height changes.
+- A remap is valid only for its specific camera and mechanical assembly.
+- Current remaps:
   - `calibration/out/cam0_planar.npz`
   - `calibration/out/cam1_planar.npz`

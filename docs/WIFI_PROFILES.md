@@ -1,134 +1,131 @@
-# Mehrere WLAN-Profile
+# Multiple Wi-Fi Profiles
 
-Der Raspberry Pi verwendet NetworkManager fuer die WLAN-Verbindungen. Das
-ABR-Werkzeug `abr.wifi_profiles` verwaltet deshalb keine eigene Passwortdatei,
-sondern arbeitet mit den geschuetzten NetworkManager-Verbindungsprofilen.
+Deutsche Fassung: [Mehrere WLAN-Profile](../docs_DE/WIFI_PROFILES.md)
 
-Praktisch bestaetigter Stand am `2026-08-03`:
+The Raspberry Pi uses NetworkManager for Wi-Fi connections. The ABR tool
+`abr.wifi_profiles` therefore does not maintain a separate password file; it
+works with NetworkManager's protected connection profiles.
 
-- Wechsel vom lokalen Router auf einen iPhone-Hotspot funktioniert
-- Rueckwechsel ist auch ueber eine Raspberry-Pi-Connect-Sitzung moeglich
-- das Hinzufuegen eines Profils ist vom eigentlichen Verbindungswechsel
-  getrennt, damit die laufende SSH-Sitzung beim Speichern erhalten bleibt
-- beim Boot und nach Verbindungsverlust kann NetworkManager aus allen
-  gespeicherten, erreichbaren Profilen automatisch auswaehlen
+Practically verified as of `2026-08-03`:
 
-## Profile anzeigen und hinzufuegen
+- switching from the local router to an iPhone hotspot works
+- switching back is also possible through a Raspberry Pi Connect session
+- adding a profile is separate from switching connections, so the active SSH
+  session remains available while saving it
+- at boot and after connection loss, NetworkManager can automatically choose
+  from all stored, reachable profiles
+
+## Listing and Adding Profiles
 
 ```bash
 cd ~/src/abr
 sudo .venv/bin/python -m abr.wifi_profiles list
-sudo .venv/bin/python -m abr.wifi_profiles add PROFILNAME TATSAECHLICHE_SSID
+sudo .venv/bin/python -m abr.wifi_profiles add PROFILE_NAME ACTUAL_SSID
 ```
 
-`add` fragt das WLAN-Passwort zuerst interaktiv ab und legt erst danach das
-vollstaendige NetworkManager-Profil an. Damit liegen die Zugangsdaten bereits
-vor, bevor die Aktivierung die bestehende SSH-Verbindung unterbrechen kann.
-Das Passwort steht nicht in der Shell-History und wird nicht im Repository
-gespeichert. Profilname und SSID duerfen verschieden sein. Namen mit
-Leerzeichen muessen in Anfuehrungszeichen stehen.
+`add` first prompts interactively for the Wi-Fi password and then creates the
+complete NetworkManager profile. Credentials are therefore available before
+activation can interrupt the existing SSH connection. The password is not
+stored in shell history or in the repository. Profile name and SSID may be
+different. Quote names containing spaces.
 
-Wichtig: Die Namen in dieser Anleitung sind Platzhalter. Befehle einzeln und
-mit der tatsaechlichen SSID ausfuehren, nicht den gesamten Beispielblock
-unveraendert in ein Terminal kopieren. `add` speichert das Profil nur und
-veraendert die laufende Verbindung nicht. Eine sofortige Aktivierung ist mit
-`--activate` moeglich, kann aber eine SSH-Sitzung unterbrechen.
+Important: Names in this guide are placeholders. Run commands individually
+with the actual SSID; do not paste an entire example block unchanged. `add`
+saves the profile without changing the active connection. Immediate
+activation is possible with `--activate`, but may interrupt an SSH session.
 
-Das vorhandene, bereits von NetworkManager gespeicherte WLAN muss nicht neu
-angelegt werden. Einmalig werden alle vorhandenen WLAN-Profile fuer die
-automatische Auswahl vorbereitet:
+An existing Wi-Fi connection already stored by NetworkManager does not need
+to be recreated. Prepare every existing profile for automatic selection once:
 
 ```bash
 sudo .venv/bin/python -m abr.wifi_profiles configure
 ```
 
-Dabei werden `connection.autoconnect=yes` und
-`connection.autoconnect-retries=0` gesetzt. NetworkManager versucht damit
-beim Boot und nach einem Verbindungsverlust dauerhaft, eines der erreichbaren
-gespeicherten Netze zu verwenden.
+This sets `connection.autoconnect=yes` and
+`connection.autoconnect-retries=0`. At boot and after connection loss,
+NetworkManager then keeps trying to use one of the stored networks that is
+currently reachable.
 
-## Profilname und SSID pruefen
+## Checking Profile Name and SSID
 
-Profilname und SSID sind nicht zwingend identisch. Die Profilnamen zeigt das
-ABR-Werkzeug:
+Profile name and SSID are not necessarily identical. The ABR tool displays
+profile names:
 
 ```bash
 sudo .venv/bin/python -m abr.wifi_profiles list
 ```
 
-Die SSID eines bestimmten Profils zeigt NetworkManager:
+NetworkManager displays the SSID of a specific profile:
 
 ```bash
 nmcli -g 802-11-wireless.ssid connection show "Example WiFi"
 ```
 
-Alle Profile samt SSID:
+Display every profile with its SSID:
 
 ```bash
 nmcli -f NAME,TYPE,802-11-wireless.ssid connection show
 ```
 
-Fuer `switch` muss der Profilname aus `abr.wifi_profiles list` exakt
-uebernommen werden. Alternativ kann die dort angezeigte UUID verwendet werden.
+For `switch`, copy the profile name from `abr.wifi_profiles list` exactly.
+The UUID shown there can be used instead.
 
-## Manuell umschalten
+## Switching Manually
 
 ```bash
-sudo .venv/bin/python -m abr.wifi_profiles switch Mobil
+sudo .venv/bin/python -m abr.wifi_profiles switch Mobile
 ```
 
-Alternativ kann die automatische Auswahl aller gespeicherten Profile sofort
-angestossen werden:
+Alternatively, trigger automatic selection from all stored profiles
+immediately:
 
 ```bash
 sudo .venv/bin/python -m abr.wifi_profiles auto
 ```
 
-`add`, `switch` und `auto` werden innerhalb einer erkannten SSH-Sitzung
-standardmaessig abgelehnt. Am sichersten werden sie mit Tastatur und Bildschirm
-direkt am Pi ausgefuehrt. Soll die bestehende SSH-Sitzung bewusst geopfert
-werden, steht die Freigabeoption vor dem Unterbefehl:
+Within a detected SSH session, `add`, `switch`, and `auto` are rejected by
+default. Running them directly on the Pi with a keyboard and monitor is
+safest. To deliberately sacrifice the current SSH connection, place the
+override before the subcommand:
 
 ```bash
-sudo .venv/bin/python -m abr.wifi_profiles --allow-ssh-disconnect switch Mobil
+sudo .venv/bin/python -m abr.wifi_profiles --allow-ssh-disconnect switch Mobile
 ```
 
-Die ABR-Runtime laeuft als systemd-Dienst unabhaengig von SSH weiter.
+The ABR runtime continues independently of SSH as a systemd service.
 
-Wenn kein Bildschirm und keine Tastatur am Pi vorhanden sind, ist der
-erprobte Ablauf:
+If no keyboard or monitor is connected to the Pi, use this verified sequence:
 
-1. neues Profil per SSH mit `add` speichern; die laufende Verbindung bleibt
-   erhalten
-2. mit `list` Profilname und UUID kontrollieren
-3. Ziel-WLAN einschalten
-4. mit `--allow-ssh-disconnect switch PROFILNAME` bewusst wechseln
-5. Rechner ebenfalls mit dem Ziel-WLAN verbinden und per `abr.local`, IP oder
-   Raspberry Pi Connect erneut auf den Pi zugreifen
-6. fuer den Rueckwechsel den exakt angezeigten Namen des lokalen Profils
-   verwenden
+1. Save the new profile over SSH using `add`; the active connection remains
+   unchanged.
+2. Verify the profile name and UUID with `list`.
+3. Enable the target Wi-Fi network.
+4. Deliberately switch with
+   `--allow-ssh-disconnect switch PROFILE_NAME`.
+5. Connect the other computer to the target network and reconnect to the Pi
+   through `abr.local`, its IP address, or Raspberry Pi Connect.
+6. To switch back, use the exact displayed name of the local profile.
 
-Sind mehrere Netze gleichzeitig erreichbar, kann beim Anlegen eine hoehere
-Prioritaet angegeben werden:
+If several networks are reachable at once, assign priorities while adding
+them:
 
 ```bash
-sudo .venv/bin/python -m abr.wifi_profiles add Zuhause MeinWLAN --priority 20
-sudo .venv/bin/python -m abr.wifi_profiles add Mobil MeinHotspot --priority 10
+sudo .venv/bin/python -m abr.wifi_profiles add Home MyWiFi --priority 20
+sudo .venv/bin/python -m abr.wifi_profiles add Mobile MyHotspot --priority 10
 ```
 
-## Persistente Autoconnect-Konfiguration
+## Persistent Autoconnect Configuration
 
-NetworkManager speichert die Autoconnect-Eigenschaften direkt in seinen
-Verbindungsprofilen und wendet sie bei jedem Boot selbst an. Der Installer
-setzt diese Eigenschaften einmalig mit den bereits durch `sudo` erteilten
-Rechten:
+NetworkManager stores autoconnect properties directly in its connection
+profiles and applies them at every boot. The installer sets these properties
+once using the privileges already granted through `sudo`:
 
 ```bash
 cd ~/src/abr
 sudo deploy/install_wifi_autoconnect.sh
 ```
 
-Kontrolle:
+Verify:
 
 ```bash
 sudo .venv/bin/python -m abr.wifi_profiles list
@@ -136,11 +133,10 @@ nmcli connection show
 nmcli device status
 ```
 
-Der Installer aktiviert keine Verbindung und wechselt kein WLAN; er aendert
-ausschliesslich die persistenten Autoconnect-Eigenschaften bereits
-gespeicherter Profile. Eine fruehere Version installierte dafuer
-`abr-wifi-autoconnect.service`. Diese Unit scheiterte ohne Root-Rechte und
-waere mit Root-Rechten unnoetig weitreichend. Der aktuelle Installer
-deaktiviert und entfernt sie bei einem Update. Spaeter extern angelegte
-Profile werden bei Bedarf durch erneuten Aufruf des Installers oder durch
-`abr.wifi_profiles configure` einbezogen.
+The installer neither activates a connection nor switches Wi-Fi; it changes
+only the persistent autoconnect properties of existing profiles. An earlier
+version installed `abr-wifi-autoconnect.service`. That unit failed without
+root privileges and would have been unnecessarily privileged if run as root.
+The current installer disables and removes it during an update. Profiles
+created later by external tools can be included by rerunning the installer or
+`abr.wifi_profiles configure`.

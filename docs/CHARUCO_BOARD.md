@@ -1,45 +1,48 @@
 # ChArUco Board
 
-Stand: `2026-06-26`
+Last reviewed: `2026-06-26`
 
-## Zweck
+Deutsche Fassung: [ChArUco-Board](../docs_DE/CHARUCO_BOARD.md)
 
-Dieses Werkzeug erzeugt ein druckbares `ChArUco`-Board fuer die Kamera-Kalibrierung.
+## Purpose
 
-Datei:
+This tool generates a printable `ChArUco` board for camera calibration.
+
+File:
 
 - [calibration/generate_charuco_board.py](../calibration/generate_charuco_board.py)
 
-## Empfohlener Pfad Fuer ABR
+## Recommended Approach for ABR
 
-Fuer die aktuellen `IMX519`-Kameras mit `140 Grad`-Weitwinkel ist ein `ChArUco`-Board der beste pragmatische Kalibrierpfad:
+For the current `IMX519` cameras with `140-degree` wide-angle lenses, a
+`ChArUco` board is the most practical calibration approach:
 
-- robuster bei starker Verzeichnung als ein reines Checkerboard
-- gute Eckdetektion auch bei teilweiser Sichtbarkeit
-- spaeter gut automatisierbar mit `OpenCV`
+- more robust with strong distortion than a plain checkerboard
+- reliable corner detection even when the board is only partially visible
+- well suited to later automation with `OpenCV`
 
-Der aktuelle Standard fuer ABR ist:
+The current ABR standard is:
 
-- Boardgroesse: `160 x 240 mm`
-- Schachbrettfelder: `8 x 12`
-- Feldgroesse: `20 x 20 mm`
-- Markerlaenge: `14 mm`
-- Dictionary: `DICT_5X5_50`
+- board size: `160 x 240 mm`
+- checkerboard squares: `8 x 12`
+- square size: `20 x 20 mm`
+- marker length: `14 mm`
+- dictionary: `DICT_5X5_50`
 
-Der erzeugte Referenzsatz liegt aktuell bereits unter:
+The generated reference files are already available under:
 
 - `calibration/out/charuco_160x240.png`
 - `calibration/out/charuco_160x240_a4.svg`
 - `calibration/out/charuco_160x240.json`
 
-Diese Kombination fuellt die Zielgroesse exakt aus:
+This combination fills the target dimensions exactly:
 
 - `160 / 8 = 20 mm`
 - `240 / 12 = 20 mm`
 
-## Vorbereitung
+## Preparation
 
-In der lokalen `venv` auf dem Mac:
+In the local virtual environment on the Mac:
 
 ```bash
 cd ~/src/abr
@@ -47,49 +50,50 @@ source .venv/bin/activate
 pip install opencv-contrib-python numpy
 ```
 
-Wichtig:
+Important:
 
-- `opencv-python` reicht nicht, weil `cv2.aruco` dort meist fehlt
-- benoetigt wird `opencv-contrib-python`
+- `opencv-python` is not sufficient because it usually does not include
+  `cv2.aruco`.
+- `opencv-contrib-python` is required.
 
-## Erzeugung Fuer 160 x 240 mm
+## Generating the 160 x 240 mm Board
 
 ```bash
 python calibration/generate_charuco_board.py \
   --output-prefix calibration/out/charuco_160x240
 ```
 
-Das Skript schreibt:
+The script writes:
 
 - `calibration/out/charuco_160x240.png`
 - `calibration/out/charuco_160x240_a4.svg`
 - `calibration/out/charuco_160x240.json`
 
-Die aktuellen Kalibrierbilder im Repo verwenden genau dieses Board:
+The current calibration images in the repository use this exact board:
 
 - `calibration/shots/cam0_charuco_01.jpg`
 - `calibration/shots/cam1_charuco_01.jpg`
 
-## Bedeutung Der Ausgaben
+## Output Files
 
-- `PNG`: reine Rastergrafik des Boards
-- `A4-SVG`: druckfertige Seite mit exakt zentriertem `160 x 240 mm`-Board
-- `JSON`: Boardparameter fuer spaetere Kalibrierung und Dokumentation
+- `PNG`: raster image containing only the board
+- `A4 SVG`: print-ready page with the `160 x 240 mm` board centered at its
+  exact physical size
+- `JSON`: board parameters for later calibration and documentation
 
-## Druckhinweis
+## Printing Instructions
 
-Die SVG sollte:
+Print the SVG:
 
-- auf `100%`
-- ohne `An Seite anpassen`
-- ohne automatische Skalierung
+- at `100%`
+- without `Fit to page`
+- without automatic scaling
 
-gedruckt werden.
+Then verify the dimensions with a ruler:
 
-Danach mit einem Lineal nachmessen:
+- total board width: `160 mm`
+- total board height: `240 mm`
+- one checkerboard square: `20 mm`
 
-- Gesamtbreite des Boards: `160 mm`
-- Gesamthoehe des Boards: `240 mm`
-- ein einzelnes Schachbrettfeld: `20 mm`
-
-Wenn diese Masse nicht stimmen, ist der Ausdruck fuer eine saubere Kalibrierung ungeeignet.
+If these measurements are incorrect, the printout is not suitable for
+accurate calibration.

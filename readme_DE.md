@@ -2,6 +2,8 @@
 
 Software- und Hardware-Repository fuer den `Accessible Book Reader` (`ABR`).
 
+Englische Leitfassung: [readme.md](readme.md)
+
 ## Lizenz
 
 Der Accessible Book Reader ist ein Open-Source-/Open-Hardware-Projekt mit
@@ -184,10 +186,9 @@ Wichtig zum aktuellen Satzrest-Verhalten:
 ## Installation
 
 Die README ist der Einstieg fuer eine Neuinstallation. Die ausfuehrliche,
-hardwarebezogene Schritt-fuer-Schritt-Anleitung steht in
-[docs/RASPBERRY_PI_SETUP.md](docs/RASPBERRY_PI_SETUP.md); der abschliessende
-Funktionstest steht in
-[docs/RASPBERRY_PI_SMOKETEST.md](docs/RASPBERRY_PI_SMOKETEST.md).
+hardwarebezogene Schritt-fuer-Schritt-Anleitung einschließlich der
+abschließenden Verifikation steht in
+[docs_DE/RASPBERRY_PI_SETUP.md](docs_DE/RASPBERRY_PI_SETUP.md).
 
 ### 1. Raspberry Pi vorbereiten und Repository auschecken
 
@@ -334,9 +335,8 @@ systemctl status abr-control-panel.service --no-pager -l
 journalctl -u abr-control-panel.service -n 100 --no-pager
 ```
 
-Danach den Hardware- und Runtime-Smoke-Test aus
-[docs/RASPBERRY_PI_SMOKETEST.md](docs/RASPBERRY_PI_SMOKETEST.md)
-durchfuehren.
+Danach die Hardware- und Runtime-Verifikation aus
+[docs_DE/RASPBERRY_PI_SETUP.md](docs_DE/RASPBERRY_PI_SETUP.md) durchführen.
 
 ### Lokale E-Mail-Konfiguration
 
@@ -633,11 +633,11 @@ Empfehlung:
 
 ## Wichtige Doku
 
-- [docs/CHAT_HANDOVER.md](docs/CHAT_HANDOVER.md)
-- [docs/LANGUAGE_PROFILES.md](docs/LANGUAGE_PROFILES.md)
-- [docs/CONTROL_RUNTIME_ARCHITECTURE.md](docs/CONTROL_RUNTIME_ARCHITECTURE.md)
-- [docs/BOOK_RUNTIME_DATA_ARCHITECTURE.md](docs/BOOK_RUNTIME_DATA_ARCHITECTURE.md)
-- [docs/SOFTWARE_STRUCTURE.md](docs/SOFTWARE_STRUCTURE.md)
-- [docs/WIFI_PROFILES.md](docs/WIFI_PROFILES.md)
-- [docs/REMOTE_MAINTENANCE_EMAIL.md](docs/REMOTE_MAINTENANCE_EMAIL.md)
+- [docs_DE/CHAT_HANDOVER.md](docs_DE/CHAT_HANDOVER.md)
+- [docs_DE/LANGUAGE_PROFILES.md](docs_DE/LANGUAGE_PROFILES.md)
+- [docs_DE/CONTROL_RUNTIME_ARCHITECTURE.md](docs_DE/CONTROL_RUNTIME_ARCHITECTURE.md)
+- [docs_DE/BOOK_RUNTIME_DATA_ARCHITECTURE.md](docs_DE/BOOK_RUNTIME_DATA_ARCHITECTURE.md)
+- [docs_DE/SOFTWARE_STRUCTURE.md](docs_DE/SOFTWARE_STRUCTURE.md)
+- [docs_DE/WIFI_PROFILES.md](docs_DE/WIFI_PROFILES.md)
+- [docs_DE/REMOTE_MAINTENANCE_EMAIL.md](docs_DE/REMOTE_MAINTENANCE_EMAIL.md)
 - [hardware/README.md](hardware/README.md)

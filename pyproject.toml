@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "abr"
 version = "0.1.0"
 description = "Accessible Book Reader prototype pipeline"
-readme = "README.md"
+readme = "readme.md"
 license = "GPL-3.0-or-later"
 license-files = ["LICENSE.md", "LICENSES/*.txt", "THIRD_PARTY_NOTICES.md"]
 requires-python = ">=3.11"

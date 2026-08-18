@@ -1,49 +1,53 @@
-# systemd-Dienst fuer das ABR-Control-Panel
+# systemd Service for the ABR Control Panel
 
-Stand: `2026-08-01`
+Last reviewed: `2026-08-01`
 
-## Zweck
+Deutsche Fassung: [systemd-Dienst für das ABR-Control-Panel](../docs_DE/SYSTEMD_CONTROL_PANEL_SERVICE.md)
 
-`abr-control-panel.service` startet die produktive ABR-Runtime unabhaengig
-von einer SSH-Sitzung. Ein Abbruch der WLAN- oder SSH-Verbindung beendet den
-Reader damit nicht mehr. systemd startet den Prozess nach einem unerwarteten
-Ende automatisch neu und schreibt Standardausgabe sowie Fehler dauerhaft ins
-Journal.
+## Purpose
 
-Benutzer-, Home-, Repository- und Pythonpfad werden bei der Installation aus
-der lokalen Umgebung ermittelt und nicht im Repository fest vorgegeben. Die
-installierte Unit liegt unter `/etc/systemd/system/abr-control-panel.service`.
+`abr-control-panel.service` runs the production ABR runtime independently of
+an SSH session. Losing Wi-Fi or SSH therefore no longer stops the reader.
+systemd automatically restarts the process after an unexpected exit and
+stores standard output and errors in the journal.
 
-## Unit installieren
+The installer derives the user, home directory, repository, and Python paths
+from the local environment instead of hard-coding them in the repository. The
+installed unit is written to
+`/etc/systemd/system/abr-control-panel.service`.
 
-Vor der Installation darf keine manuell gestartete zweite Instanz laufen:
+## Installing the Unit
+
+Before installation, make sure no manually started second instance is
+running:
 
 ```bash
 pgrep -af control_panel_service.py
 ```
 
-Eine vorhandene Vordergrundinstanz im zugehoerigen Terminal mit `Ctrl+C`
-beenden. Anschliessend die Unit aus der Repository-Vorlage installieren:
+Stop an existing foreground instance with `Ctrl+C` in its terminal. Then
+install the unit from the repository template:
 
 ```bash
 cd ~/src/abr
 sudo deploy/install_control_panel_service.sh
 ```
 
-Der Installer setzt die Platzhalter in `deploy/abr-control-panel.service` und
-schreibt erst die fertige Unit nach `/etc/systemd/system/`. `HOME` ist darin
-explizit gesetzt, damit Google-Cloud-Anmeldedaten des Benutzers
-gefunden werden. `KillSignal=SIGINT` verwendet beim Stoppen den vorhandenen
-geordneten `KeyboardInterrupt`-Pfad der Runtime.
+The installer substitutes placeholders in
+`deploy/abr-control-panel.service` and writes only the completed unit to
+`/etc/systemd/system/`. It explicitly sets `HOME` so the user's Google Cloud
+credentials can be found. `KillSignal=SIGINT` uses the runtime's existing
+orderly `KeyboardInterrupt` shutdown path.
 
-Unit pruefen, laden, beim Boot aktivieren und sofort starten:
+Verify the unit and inspect its status after the installer has loaded,
+enabled, and started it:
 
 ```bash
 sudo systemd-analyze verify /etc/systemd/system/abr-control-panel.service
 systemctl status abr-control-panel.service --no-pager -l
 ```
 
-## Betrieb und Logs
+## Operation and Logs
 
 ```bash
 sudo systemctl start abr-control-panel.service
@@ -52,7 +56,7 @@ sudo systemctl restart abr-control-panel.service
 systemctl is-active abr-control-panel.service
 ```
 
-Live-Log und letzte Meldungen:
+Live log and recent messages:
 
 ```bash
 journalctl -u abr-control-panel.service -f
@@ -60,35 +64,36 @@ journalctl -u abr-control-panel.service -n 100 --no-pager
 journalctl -u abr-control-panel.service --since today --no-pager
 ```
 
-Neustartzaehler und aktueller Hauptprozess:
+Restart counter and current main process:
 
 ```bash
 systemctl show abr-control-panel.service -p MainPID -p NRestarts -p ExecMainCode -p ExecMainStatus
 ```
 
-Nach einer Aenderung an der Unit:
+After changing the unit:
 
 ```bash
 sudo systemctl daemon-reload
 sudo systemctl restart abr-control-panel.service
 ```
 
-Nach einer reinen Code-Aktualisierung genuegt:
+After a code-only update, restarting the service is sufficient:
 
 ```bash
 sudo systemctl restart abr-control-panel.service
 ```
 
-## Funktion pruefen
+## Functional Verification
 
-Nach dem Start SSH bewusst trennen, neu verbinden und kontrollieren:
+After starting the service, deliberately disconnect SSH, reconnect, and
+verify:
 
 ```bash
 systemctl is-active abr-control-panel.service
 pgrep -af control_panel_service.py
 ```
 
-Ein automatischer Neustart kann gezielt getestet werden:
+Automatic restart can be tested deliberately:
 
 ```bash
 sudo systemctl kill --signal=SIGKILL abr-control-panel.service
@@ -97,27 +102,27 @@ systemctl status abr-control-panel.service --no-pager
 systemctl show abr-control-panel.service -p NRestarts
 ```
 
-Ein `systemctl stop` gilt dagegen als gewollter Stopp und loest trotz
-`Restart=always` keinen Neustart aus.
+By contrast, `systemctl stop` is an intentional stop and does not trigger a
+restart despite `Restart=always`.
 
-## Diagnose
+## Diagnostics
 
-Wenn der Dienst nicht startet:
+If the service does not start:
 
 ```bash
 systemctl status abr-control-panel.service --no-pager -l
 journalctl -u abr-control-panel.service -n 200 --no-pager
 ```
 
-Typische Ursachen:
+Common causes:
 
-- `.venv/bin/python` fehlt oder ist nicht ausfuehrbar
-- eine zweite manuelle Instanz belegt GPIO, Kamera, NFC oder Audio
-- Google-Cloud-Anmeldedaten sind fuer den konfigurierten Dienstbenutzer nicht erreichbar
-- Hardwaregeraete oder Benutzergruppen unterscheiden sich vom manuellen Lauf
-- nach einer Unit-Aenderung wurde `systemctl daemon-reload` vergessen
+- `.venv/bin/python` is missing or not executable
+- a second manually started instance is occupying GPIO, cameras, NFC, or audio
+- Google Cloud credentials are unavailable to the configured service user
+- hardware-device access or group membership differs from the manual run
+- `systemctl daemon-reload` was omitted after changing the unit
 
-Der zuvor beobachtete Ausfall war kein Pi-Neustart: Eine kurze
-WLAN-Unterbrechung liess die SSH-Sitzung auslaufen. Die im Vordergrund dieser
-Sitzung gestartete Runtime wurde beim Entfernen des Session-Scopes beendet.
-Der systemd-Dienst beseitigt genau diese Kopplung.
+A previously observed outage was not a Raspberry Pi restart. A short Wi-Fi
+interruption caused the SSH session to time out, and the foreground runtime
+was terminated when its session scope was removed. The systemd service
+eliminates this dependency.

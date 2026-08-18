@@ -64,7 +64,7 @@ Project documentation is licensed under the Creative Commons
 Attribution-ShareAlike 4.0 International licence (`CC-BY-SA-4.0`). This
 includes:
 
-- `README.md`, `abr_Briefing.md` and other project-authored Markdown files
+- `readme.md`, `readme_DE.md`, `abr_Briefing.md` and other project-authored Markdown files
 - `docs/`
 - project-authored README files below `hardware/` and `testdata/`
 - project-owned texts, selection and arrangement embodied in the generated

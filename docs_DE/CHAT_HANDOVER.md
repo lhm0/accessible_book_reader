@@ -51,13 +51,12 @@ Neu hinzugekommen sind:
 - bestehende `book.json` ohne Sprache gelten als Deutsch; englische Testbuecher
   aus der Zeit vor Etappe 5 muessen kontrolliert migriert oder neu angelegt
   werden
-- die [README](../README.md) ist jetzt der kanonische Einstieg fuer eine
+- die [deutsche README](../readme_DE.md) dokumentiert den bisherigen Stand;
+  die englische [README](../readme.md) ist der kanonische Einstieg fuer eine
   Neuinstallation; sie fuehrt von Systempaketen und Checkout ueber `.venv`,
   Google ADC und Geraetekonfiguration bis zu systemd-Diensten und Smoke-Test
-- die hardwarebezogenen Details bleiben in
-  [docs/RASPBERRY_PI_SETUP.md](RASPBERRY_PI_SETUP.md), die abschliessende
-  Verifikation in
-  [docs/RASPBERRY_PI_SMOKETEST.md](RASPBERRY_PI_SMOKETEST.md)
+- die hardwarebezogenen Details und die abschließende Verifikation stehen in
+  [RASPBERRY_PI_SETUP.md](RASPBERRY_PI_SETUP.md)
 - alle geraete- und personenbezogenen Werte liegen ausserhalb des
   Repositorys: Google ADC unter `~/.config/gcloud/`, Sprache unter
   `~/.config/abr/device.json`, Maildaten unter `~/.config/abr/mail.ini` und
@@ -1073,12 +1072,12 @@ Ziel fuer den Folgechat:
 
 ## Weitere Doku im Repo
 
-- [README.md](../README.md)
+- [readme.md](../readme.md)
+- [readme_DE.md](../readme_DE.md)
 - [docs/CONTROL_PANEL_ARCHITECTURE.md](../docs/CONTROL_PANEL_ARCHITECTURE.md)
 - [docs/CONTROL_RUNTIME_ARCHITECTURE.md](../docs/CONTROL_RUNTIME_ARCHITECTURE.md)
 - [docs/BOOK_RUNTIME_DATA_ARCHITECTURE.md](../docs/BOOK_RUNTIME_DATA_ARCHITECTURE.md)
 - [docs/SOFTWARE_STRUCTURE.md](../docs/SOFTWARE_STRUCTURE.md)
-- [docs/ROADMAP.md](../docs/ROADMAP.md)
 - [docs/REMOTE_MAINTENANCE_EMAIL.md](../docs/REMOTE_MAINTENANCE_EMAIL.md)
 - [docs/USAGE_STATISTICS.md](../docs/USAGE_STATISTICS.md)
 - [docs/WIFI_PROFILES.md](../docs/WIFI_PROFILES.md)

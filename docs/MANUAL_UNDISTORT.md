@@ -1,54 +1,61 @@
-# Manual Undistort
+# Manual Undistortion
 
-Stand: `2026-06-26`
+Last reviewed: `2026-06-26`
 
-## Zweck
+Deutsche Fassung: [Manuelle Entzerrung](../docs_DE/MANUAL_UNDISTORT.md)
 
-Dieses Werkzeug entzerrt ein einzelnes Bild mit manuell uebergebenen Kameraparametern. Im aktuellen Projektstand ist es nur noch ein Fallback- und Vergleichswerkzeug, nicht mehr der bevorzugte Kalibrierpfad.
+## Purpose
 
-Datei:
+This tool undistorts a single image using camera parameters supplied manually.
+In the current project, it serves only as a fallback and comparison tool; it
+is no longer the preferred calibration path.
+
+File:
 
 - [calibration/manual_undistort.py](../calibration/manual_undistort.py)
 
-## Rolle Im Aktuellen Projektstand
+## Role in the Current Project
 
-Das Skript ist bewusst kein Kalibrierwerkzeug.
+The script is deliberately not a calibration tool.
 
-Es nimmt stattdessen:
+It accepts:
 
-- Kameramatrix `K`
-- Distortion-Koeffizienten
-- Modellwahl `fisheye` oder `standard`
+- camera matrix `K`
+- distortion coefficients
+- model selection: `fisheye` or `standard`
 
-und schreibt daraus eine entzerrte Bilddatei.
+and uses them to write an undistorted image file.
 
-Damit kannst du am Mac Werte schrittweise variieren und die Wirkung direkt vergleichen.
+This allows you to vary values step by step on the Mac and compare their
+effects directly.
 
-Bevorzugter aktueller Projektpfad fuer die Pi-Kameras ist stattdessen:
+The currently preferred project path for the Pi cameras is instead:
 
-- `ChArUco`-Board erzeugen: [docs/CHARUCO_BOARD.md](../docs/CHARUCO_BOARD.md)
-- feste Remap aus Kalibrierbild berechnen: [docs/PLANAR_CHARUCO_REMAP.md](../docs/PLANAR_CHARUCO_REMAP.md)
+- generate a `ChArUco` board:
+  [CHARUCO_BOARD.md](CHARUCO_BOARD.md)
+- calculate a fixed remap from a calibration image:
+  [PLANAR_CHARUCO_REMAP.md](PLANAR_CHARUCO_REMAP.md)
 
-## Vorbereitung Am Mac
+## Preparation on the Mac
 
-Im Repo:
+From the repository:
 
 ```bash
 cd ~/src/abr
 source .venv/bin/activate
 ```
 
-Falls `opencv-python` in der lokalen `venv` noch fehlt:
+If `opencv-python` is not yet installed in the local virtual environment:
 
 ```bash
 pip install opencv-python numpy
 ```
 
-## Empfehlung Fuer Dein Objektiv
+## Recommendation for the Lens
 
-Fuer ein `140 Grad`-Weitwinkelobjektiv ist zuerst das `fisheye`-Modell sinnvoll.
+For a `140-degree` wide-angle lens, start with the `fisheye` model.
 
-Verwende dort:
+It uses:
 
 - `fx`
 - `fy`
@@ -56,9 +63,9 @@ Verwende dort:
 - `cy`
 - `k1,k2,k3,k4`
 
-## Beispielaufrufe
+## Examples
 
-### Fisheye-Modell
+### Fisheye Model
 
 ```bash
 python calibration/manual_undistort.py \
@@ -73,7 +80,7 @@ python calibration/manual_undistort.py \
   --balance 0.2
 ```
 
-### Standardmodell
+### Standard Model
 
 ```bash
 python calibration/manual_undistort.py \
@@ -88,63 +95,65 @@ python calibration/manual_undistort.py \
   --alpha 0.0
 ```
 
-## Parameterhinweise
+## Parameter Notes
 
-### Kameramatrix
+### Camera Matrix
 
-- `fx`, `fy`: effektive Brennweiten in Pixel
-- `cx`, `cy`: optisches Zentrum in Pixel
+- `fx`, `fy`: effective focal lengths in pixels
+- `cx`, `cy`: optical center in pixels
 
-Pragmatischer Startwert fuer eine `4656x3496`-Aufnahme:
+A pragmatic starting point for a `4656x3496` image is:
 
 - `cx = 2328`
 - `cy = 1748`
 
-also erst einmal Bildmitte annehmen.
+This initially assumes that the optical center is at the image center.
 
-### Fisheye
+### Fisheye Model
 
-- `dist` erwartet genau `k1,k2,k3,k4`
+- `dist` expects exactly `k1,k2,k3,k4`
 - `balance = 0.0`
-  - mehr Beschnitt
-  - meist geradliniger
+  - more cropping
+  - usually straighter output
 - `balance = 1.0`
-  - mehr Sichtfeld
-  - eher mehr Randreste
+  - wider field of view
+  - potentially more unwanted edge areas
 
-### Standardmodell
+### Standard Model
 
-- `dist` erwartet genau `k1,k2,p1,p2,k3`
+- `dist` expects exactly `k1,k2,p1,p2,k3`
 - `alpha = 0.0`
-  - maximaler Beschnitt auf brauchbaren Bereich
+  - maximum crop to the usable region
 - `alpha = 1.0`
-  - mehr Rand, mehr schwarze Flaechen moeglich
+  - more of the border retained, with potentially larger black areas
 
-## Praktischer Workflow
+## Practical Workflow
 
-1. Ein Testbild nach `calibration/` legen
-2. Mit `fisheye` starten
-3. `cx` und `cy` zunaechst auf Bildmitte setzen
-4. zuerst nur `k1` und `k2` grob variieren
-5. danach `k3` und `k4` feinjustieren
-6. `balance` so einstellen, dass du einen brauchbaren Kompromiss aus Randbeschnitt und Geradlinigkeit bekommst
+1. Place a test image in `calibration/`.
+2. Start with the `fisheye` model.
+3. Initially set `cx` and `cy` to the image center.
+4. First vary only `k1` and `k2` approximately.
+5. Fine-tune `k3` and `k4` afterward.
+6. Adjust `balance` to obtain a useful compromise between cropping and
+   straight lines.
 
-## Vorschlag Fuer Erste Versuche
+## Suggested Initial Experiments
 
-Fuer starke Tonnenverzeichnung mit Fisheye-Modell koennen diese Startwerte als reine Naeherung helfen:
+For strong barrel distortion with the fisheye model, these values may serve
+as approximate search ranges:
 
-- `fx = 1800` bis `2600`
-- `fy = 1800` bis `2600`
-- `k1 = 0.02` bis `0.20`
-- `k2 = -0.20` bis `0.05`
-- `k3 = -0.05` bis `0.05`
-- `k4 = -0.02` bis `0.02`
+- `fx = 1800` to `2600`
+- `fy = 1800` to `2600`
+- `k1 = 0.02` to `0.20`
+- `k2 = -0.20` to `0.05`
+- `k3 = -0.05` to `0.05`
+- `k4 = -0.02` to `0.02`
 
-Das sind bewusst nur Suchbereiche, keine Kalibrierwerte.
+These are deliberately only search ranges, not calibration values.
 
-## Optional Fuer Schnellere Vergleiche
+## Optional Faster Comparisons
 
-Wenn du nur schnell Varianten vergleichen willst:
+For quick visual comparison between variants:
 
 ```bash
 python calibration/manual_undistort.py \
@@ -160,4 +169,4 @@ python calibration/manual_undistort.py \
   --preview-width 1600
 ```
 
-Dann wird nur die Ausgabedatei zum schnelleren visuellen Vergleich verkleinert.
+Only the output file is resized, making visual comparisons faster.

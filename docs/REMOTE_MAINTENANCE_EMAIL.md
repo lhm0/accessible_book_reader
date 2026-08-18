@@ -1,92 +1,94 @@
-# Fernwartung per E-Mail
+# Remote Maintenance by E-Mail
 
-Stand: `2026-07-13`
+Last reviewed: `2026-07-13`
 
-## Zweck
+Deutsche Fassung: [Fernwartung per E-Mail](../docs_DE/REMOTE_MAINTENANCE_EMAIL.md)
 
-Die E-Mail-Wartung ergaenzt SSH um zwei Dateiwege:
+## Purpose
 
-- `email_download DATEI` sendet eine lokale Datei immer an den in der lokalen
-  `mail.ini` eingetragenen Wert `recipient`.
-- Ein `systemd`-Timer prueft alle zwei Minuten noch nicht vom ABR verarbeitete
-  E-Mails. Eine Mail von diesem konfigurierten Empfaenger mit dem Betreff
-  `save PFAD/` und genau einem
-  Anhang speichert den Anhang unter seinem Anhangsnamen im angegebenen Ordner.
+E-mail maintenance supplements SSH with two file-transfer paths:
 
-Die Implementierung liegt in `abr/remote_mail.py` und verwendet nur die
-Python-Standardbibliothek.
+- `email_download FILE` sends a local file to the `recipient` configured in
+  the local `mail.ini`.
+- A `systemd` timer checks every two minutes for messages not yet processed by
+  ABR. A message from that configured recipient, with the subject
+  `save PATH/` and exactly one attachment, stores the attachment under its
+  attachment filename in the specified directory.
 
-## Sicherheitsregeln
+The implementation is located in `abr/remote_mail.py` and uses only the Python
+standard library.
 
-- Die Kontodaten liegen ausschliesslich in `~/.config/abr/mail.ini` mit Modus
-  `0600`, nicht im Repository.
-- Uploads werden nur vom exakten, lokal als `recipient` konfigurierten
-  Absender angenommen.
-- Die Mail muss genau einen Anhang enthalten.
-- Das Zielverzeichnis muss bereits existieren. Der Dateiname wird aus dem
-  Anhang uebernommen und darf selbst keinen Pfad enthalten.
-- Eine vorhandene Datei wird atomar niemals ueberschrieben.
-- Relative Uploadpfade beziehen sich auf das Home-Verzeichnis des Pi-Benutzers.
-- Erfolgreich verarbeitete Upload-Mails werden nach dem sicheren Speichern des
-  Anhangs aus dem IMAP-Postfach geloescht. Bereits durch ein anderes
-  Mailprogramm gelesene Nachrichten werden ebenfalls erkannt.
-  Verarbeitete IMAP-UIDs stehen in `~/.local/state/abr/mail_upload.json`.
-  Fehlgeschlagene Mails werden nicht geloescht und beim naechsten Lauf erneut
-  versucht, unabhaengig von ihrem Gelesen-Status.
+## Security Rules
 
-E-Mail ist nicht Ende-zu-Ende-verschluesselt. Deshalb keine privaten
-Schluessel, Passwoerter oder andere Geheimnisse auf diesem Weg uebertragen.
+- Account details are stored exclusively in `~/.config/abr/mail.ini` with
+  mode `0600`, never in the repository.
+- Uploads are accepted only from the exact sender configured locally as
+  `recipient`.
+- A message must contain exactly one attachment.
+- The target directory must already exist. The filename is taken from the
+  attachment and must not contain a path.
+- An existing file is never overwritten; storage is atomic.
+- Relative upload paths are resolved from the Pi user's home directory.
+- Successfully processed upload messages are deleted from the IMAP mailbox
+  only after the attachment has been stored safely. Messages already marked
+  as read by another mail client are also detected.
+- Processed IMAP UIDs are stored in
+  `~/.local/state/abr/mail_upload.json`.
+- Failed messages are not deleted and are retried on the next run regardless
+  of their read status.
 
-## Installation auf dem Raspberry Pi
+E-mail is not end-to-end encrypted. Do not transfer private keys, passwords,
+or other secrets through this mechanism.
 
-Im aktuellen Projektpfad:
+## Installation on the Raspberry Pi
+
+From the current project directory:
 
 ```bash
 cd ~/src/abr
 sudo deploy/install_remote_mail.sh
 ```
 
-Beim ersten Lauf wird `~/.config/abr/mail.ini` aus
-`deploy/mail.ini.example` angelegt. Die Datei mit Mailadresse, Empfaenger,
-Benutzername, App-Passwort sowie den SMTP-/IMAP-Daten des eigenen Anbieters
-ausfuellen und denselben Installationsbefehl erneut starten. Die echten Werte
-bleiben ausserhalb des Repositorys; die Datei hat Modus `0600`. Viele Anbieter
-verlangen fuer diesen Zweck ein separates App-Passwort. SMTP und IMAP werden
-mit SSL/TLS verwendet.
+On its first run, the installer creates `~/.config/abr/mail.ini` from
+`deploy/mail.ini.example`. Complete the file with the e-mail address,
+recipient, username, app password, and SMTP/IMAP settings for the selected
+provider, then run the same installation command again. Real values remain
+outside the repository and the file uses mode `0600`. Many providers require
+a separate app password. SMTP and IMAP both use SSL/TLS.
 
-Der Installer erzeugt:
+The installer creates:
 
 - `/usr/local/bin/email_download`
 - `/etc/systemd/system/abr-email-upload.service`
 - `/etc/systemd/system/abr-email-upload.timer`
 
-## Benutzung
+## Usage
 
-Download vom Pi:
+Send a file from the Pi:
 
 ```bash
 cd ~/src/abr/captures/latest/raw
 email_download cam0_raw.jpg
 ```
 
-Upload zum Pi, absolute Variante:
+Upload a file to the Pi using an absolute home-relative form:
 
 ```text
-Betreff: save ~/src/abr/
-Anhang: example.txt
+Subject: save ~/src/abr/
+Attachment: example.txt
 ```
 
-Relative Variante, bezogen auf `~`:
+Relative form, resolved from `~`:
 
 ```text
-Betreff: save src/abr/
-Anhang: example.txt
+Subject: save src/abr/
+Attachment: example.txt
 ```
 
-Wichtig: In das Betreff-Feld wird nur `save ...` eingetragen. Die
-Beschriftung `Betreff:` ist nicht Teil des eigentlichen Mailbetreffs.
+Important: Enter only `save ...` in the actual subject field. The label
+`Subject:` is not part of the subject.
 
-## Pruefung und Diagnose
+## Verification and Diagnostics
 
 ```bash
 email_download --help
@@ -95,6 +97,6 @@ sudo systemctl start abr-email-upload.service
 journalctl -u abr-email-upload.service -n 50 --no-pager
 ```
 
-Eine bereits vorhandene Zieldatei fuehrt absichtlich zu einem Fehler. Nach
-dem Entfernen oder Umbenennen der Zieldatei kann die weiterhin vorhandene Mail
-beim naechsten Lauf verarbeitet werden.
+An existing target file deliberately causes an error. After removing or
+renaming that file, the message still present in the mailbox can be processed
+on the next run.

@@ -1176,20 +1176,27 @@ def _merge_speak_text_hyphenation(lines: list[str]) -> list[str]:
 def _resolve_spread_page_numbers(drafts: list[_PageDraft]) -> None:
     if len(drafts) != 2:
         return
-    by_side = {draft.side: draft for draft in drafts}
-    left = by_side.get("left")
-    right = by_side.get("right")
-    if left is None or right is None:
+    numbered = [draft for draft in drafts if draft.page_number is not None]
+    unnumbered = [draft for draft in drafts if draft.page_number is None]
+    if len(numbered) != 1 or len(unnumbered) != 1:
         return
 
-    if left.page_number is not None and right.page_number is None:
-        right.page_number = left.page_number + 1
-        right.inferred_page_number = True
-        right.footer_artifact_index = _detect_footer_artifact_index(right.line_entries)
-    elif right.page_number is not None and left.page_number is None:
-        left.page_number = right.page_number - 1
-        left.inferred_page_number = True
-        left.footer_artifact_index = _detect_footer_artifact_index(left.line_entries)
+    detected = numbered[0]
+    inferred = unnumbered[0]
+    if detected.side == "right" and inferred.side == "left":
+        inferred_number = detected.page_number - 1
+    elif detected.side == "left" and inferred.side == "right":
+        inferred_number = detected.page_number + 1
+    else:
+        return
+
+    # Seite 1 besitzt keinen gueltigen Vorgaenger. In diesem unplausiblen Fall
+    # bleibt die andere Seite lieber unnummeriert, statt als 0000 gespeichert zu werden.
+    if inferred_number < 1:
+        return
+    inferred.page_number = inferred_number
+    inferred.inferred_page_number = True
+    inferred.footer_artifact_index = _detect_footer_artifact_index(inferred.line_entries)
 
 
 def _detect_footer_artifact_index(line_entries: list[dict[str, Any]]) -> int | None:

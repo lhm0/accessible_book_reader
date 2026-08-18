@@ -986,9 +986,71 @@ def test_page_ingestor_replaces_unnumbered_incremental_placeholder_with_numbered
 
     assert [page.page_number for page in final_result.pages] == [6, 7]
     assert not (store.book_dir("book-numbered") / "pages" / "page_1.json").exists()
+    assert not (store.book_dir("book-numbered") / "pages" / "page_2.json").exists()
     assert (store.book_dir("book-numbered") / "pages" / "0006.json").exists()
     assert (store.book_dir("book-numbered") / "pages" / "0007.json").exists()
     assert [page.page_number for page in store.list_pages("book-numbered")] == [6, 7]
+
+
+def test_page_ingestor_numbers_first_page_after_number_on_second_left_page(
+    tmp_path: Path,
+) -> None:
+    store = BookStore(tmp_path / "library")
+    ingestor = PageIngestor(store, language_code="en")
+    report_dir = tmp_path / "captures" / "scan_incremental_left_number" / "ocr_text"
+    report_dir.mkdir(parents=True)
+    first_page = {
+        "page_id": "page_1",
+        "slot": "right",
+        "ocr_lines": [
+            {
+                "text": "The preceding page has no visible number.",
+                "bbox": [[90, 120], [920, 120], [920, 160], [90, 160]],
+            }
+        ],
+    }
+    first_report = report_dir / "first_report.json"
+    first_report.write_text(json.dumps({"pages": [first_page]}), encoding="utf-8")
+    combined_report = report_dir / "report.json"
+    combined_report.write_text(
+        json.dumps(
+            {
+                "pages": [
+                    first_page,
+                    {
+                        "page_id": "page_2",
+                        "slot": "left",
+                        "ocr_lines": [
+                            {
+                                "text": "The numbered page follows it.",
+                                "bbox": [[90, 120], [920, 120], [920, 160], [90, 160]],
+                            },
+                            {
+                                "text": "9",
+                                "bbox": [[300, 1760], [360, 1760], [360, 1790], [300, 1790]],
+                            },
+                        ],
+                    },
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    early_result = ingestor.ingest_report("book-left-numbered", first_report)
+    assert early_result.pages[0].page_number is None
+    assert (store.book_dir("book-left-numbered") / "pages" / "page_1.json").exists()
+
+    final_result = ingestor.ingest_report("book-left-numbered", combined_report)
+
+    assert [page.page_number for page in final_result.pages] == [10, 9]
+    assert final_result.pages[0].metadata["page_number_inferred"] is True
+    pages_dir = store.book_dir("book-left-numbered") / "pages"
+    assert not (pages_dir / "page_1.json").exists()
+    assert not (pages_dir / "page_2.json").exists()
+    assert (pages_dir / "0009.json").exists()
+    assert (pages_dir / "0010.json").exists()
+    assert [page.page_number for page in store.list_pages("book-left-numbered")] == [9, 10]
 
 
 def test_page_ingestor_incremental_flow_keeps_right_to_next_left_tail_carryover(tmp_path: Path) -> None:

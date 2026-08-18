@@ -2832,6 +2832,71 @@ def test_capture_book_context_resolves_type_v_only_with_configured_fallback_orie
     assert context == runtime_module.CaptureBookContext("04A1B2C3", "reader1")
 
 
+def test_capture_book_context_creates_new_book_from_single_type_v_tag(tmp_path: Path) -> None:
+    manager = ForegroundJobManager()
+    scan = NFCTagScan(tags=(NFCTag("e004010916f30001", "ISO15693", 2),))
+    controller = RuntimeController(
+        monitor=FrontPanelMonitor(gpio=_FakeGPIO()),
+        job_manager=manager,
+        capture_ocr_config=CaptureOCRJobConfig(project_root=tmp_path, language="en"),
+        page_ingest_config=PageIngestRuntimeConfig(library_root=tmp_path / "library"),
+        nfc_tag_reader=_AsyncNFCTagReader(scan),
+    )
+    try:
+        context = controller._fetch_capture_book_context()
+    finally:
+        controller.stop()
+        manager.shutdown()
+
+    assert context == runtime_module.CaptureBookContext("E004010916F30001", "reader2")
+    store = runtime_module.BookStore(tmp_path / "library")
+    book = store.load_book("E004010916F30001")
+    assert book is not None
+    assert book.language == "en"
+    assert store.load_page_orientation("E004010916F30001") == "reader2"
+
+
+def test_capture_book_context_reopens_book_keyed_directly_by_type_v_tag(tmp_path: Path) -> None:
+    store = runtime_module.BookStore(tmp_path / "library")
+    store.ensure_book("E004010916F30001")
+    manager = ForegroundJobManager()
+    scan = NFCTagScan(tags=(NFCTag("E004010916F30001", "ISO15693", 1),))
+    controller = RuntimeController(
+        monitor=FrontPanelMonitor(gpio=_FakeGPIO()),
+        job_manager=manager,
+        page_ingest_config=PageIngestRuntimeConfig(library_root=tmp_path / "library"),
+    )
+    try:
+        context = controller._resolve_capture_book_context(scan)
+    finally:
+        controller.stop()
+        manager.shutdown()
+
+    assert context == runtime_module.CaptureBookContext("E004010916F30001", "reader2")
+
+
+def test_capture_book_context_rejects_multiple_unknown_type_v_tags(tmp_path: Path) -> None:
+    manager = ForegroundJobManager()
+    scan = NFCTagScan(
+        tags=(
+            NFCTag("E004010916F30001", "ISO15693", 1),
+            NFCTag("E004010916F30002", "ISO15693", 2),
+        )
+    )
+    controller = RuntimeController(
+        monitor=FrontPanelMonitor(gpio=_FakeGPIO()),
+        job_manager=manager,
+        page_ingest_config=PageIngestRuntimeConfig(library_root=tmp_path / "library"),
+    )
+    try:
+        context = controller._resolve_capture_book_context(scan)
+    finally:
+        controller.stop()
+        manager.shutdown()
+
+    assert context is None
+
+
 def test_nfc_orientations_override_legacy_right_page_rotation() -> None:
     from abr.preprocessing.processor import PreprocessorConfig
 

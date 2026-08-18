@@ -28,6 +28,7 @@ from abr.book import (
     PageRecord,
     SummaryManager,
     SummaryService,
+    normalize_tag_id,
 )
 from abr.control.audio_volume import AudioVolumeController
 from abr.control.artifact_cleanup import ArtifactCleaner, ArtifactCleanupConfig
@@ -1426,6 +1427,21 @@ class RuntimeController:
                     tag_id=tag_id,
                     orientation=self.capture_ocr_config.iso15693_only_orientation,
                 )
+            direct_tag_id = normalize_tag_id(secondary.uid)
+            if store.load_book(direct_tag_id) is not None:
+                return CaptureBookContext(
+                    tag_id=direct_tag_id,
+                    orientation=self.capture_ocr_config.iso15693_only_orientation,
+                )
+        unknown_iso15693_ids = {
+            normalize_tag_id(tag.uid)
+            for tag in scan.iso15693_tags
+        }
+        if len(unknown_iso15693_ids) == 1:
+            return CaptureBookContext(
+                tag_id=unknown_iso15693_ids.pop(),
+                orientation=self.capture_ocr_config.iso15693_only_orientation,
+            )
         return None
 
     def _ensure_book_context(self, tag_id: str) -> bool:

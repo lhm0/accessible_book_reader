@@ -1838,8 +1838,9 @@ def _build_capture_ocr_runner(
             if context is None:
                 raise RuntimeError("Kein ISO14443A-Tag und keine bekannte ISO15693-Zuordnung gefunden.")
             resolved_tag_id = context.tag_id
-            orientation = context.orientation
-        preprocess_config = _preprocess_config_for_orientation(default_preprocess_config, orientation)
+            # NFC identifies the book only. Page orientation is determined from
+            # text immediately before the normal OCR run.
+        preprocess_config = default_preprocess_config
         if resolved_tag_id is None and incremental_ingest:
             raise RuntimeError("Keine Buch-Tag-ID fuer page-ingest verfuegbar.")
 
@@ -1869,14 +1870,18 @@ def _build_capture_ocr_runner(
             progress_callback(f"OCR abgeschlossen, Ergebnis archiviert unter {stable_output_dir}.")
         else:
             case_dir = session_dir / "case"
+            orientation_result = _detect_capture_orientation(case_dir, language=config.language)
+            orientation = "reader1" if int(orientation_result["rotation_deg"]) == 180 else "reader2"
+            progress_callback(f"OCR-Orientierung: {orientation_result['reason']}.")
+            _apply_capture_orientation(case_dir, orientation)
+            preprocess_config = _preprocess_config_for_orientation(default_preprocess_config, orientation)
             if orientation is not None:
-                _apply_capture_orientation(case_dir, orientation)
                 left_camera, right_camera = _camera_assignment_after_orientation(
                     capture_metadata,
                     orientation,
                 )
                 progress_callback(
-                    "NFC-Zuordnung angewendet: "
+                    "OCR-Orientierungszuordnung angewendet: "
                     f"{_orientation_label(orientation)}, "
                     f"linkes Bild = Kamera {left_camera}, "
                     f"rechtes Bild = Kamera {right_camera}, "
@@ -2032,6 +2037,23 @@ def _apply_capture_orientation(case_dir: Path, orientation: str) -> None:
         raise ValueError(f"Unbekannte Buchorientierung: {orientation}")
 
     apply_rotation_in_place(case_dir / "right.jpg", 180)
+
+
+def _detect_capture_orientation(case_dir: Path, *, language: str) -> dict[str, object]:
+    import cv2
+
+    from abr.capture_ocr import detect_page_orientation_from_text_lines
+    from abr.ocr.factory import create_ocr_backend
+
+    probe_path = case_dir / "left.jpg"
+    orientation_probe = cv2.imread(str(probe_path), cv2.IMREAD_COLOR)
+    if orientation_probe is None:
+        raise FileNotFoundError(f"Orientierungsbild konnte nicht geladen werden: {probe_path}")
+    return detect_page_orientation_from_text_lines(
+        orientation_probe,
+        create_ocr_backend("rapidocr"),
+        language=language,
+    )
 
 
 def _preprocess_config_for_orientation(default_config, orientation: str | None):

@@ -4,7 +4,7 @@ from pathlib import Path
 import cv2
 import numpy as np
 
-from abr.capture_ocr import run_capture_ocr
+from abr.capture_ocr import detect_page_orientation_from_text_lines, run_capture_ocr
 from abr.models import OCRLine
 
 
@@ -12,6 +12,38 @@ def _write_test_image(path: Path) -> None:
     image = np.full((24, 32, 3), 180, dtype=np.uint8)
     ok = cv2.imwrite(str(path), image)
     assert ok
+
+
+def test_textline_orientation_uses_three_lines_and_rotates_on_confident_vote() -> None:
+    image = np.full((600, 900, 3), 255, dtype=np.uint8)
+    for y in (120, 260, 400):
+        cv2.putText(image, "Eine ausreichend lange Textzeile", (80, y), cv2.FONT_HERSHEY_SIMPLEX, 1.1, (0, 0, 0), 2)
+
+    class FakeBackend:
+        def classify_text_orientation(self, images, language: str = "de"):
+            assert language == "de"
+            assert len(images) == 3
+            return [("180", 0.98), ("180", 0.96), ("0", 0.81)]
+
+    result = detect_page_orientation_from_text_lines(image, FakeBackend())
+
+    assert result["rotation_deg"] == 180
+    assert len(result["line_boxes"]) == 3
+    assert "votes=0:0.810,180:1.940" in result["reason"]
+
+
+def test_textline_orientation_falls_back_to_zero_without_reliable_lines() -> None:
+    image = np.full((200, 300, 3), 255, dtype=np.uint8)
+
+    class FakeBackend:
+        def classify_text_orientation(self, images, language: str = "de"):
+            del language
+            assert images == []
+            return []
+
+    result = detect_page_orientation_from_text_lines(image, FakeBackend())
+
+    assert result["rotation_deg"] == 0
 
 
 def test_run_capture_ocr_writes_left_before_processing_right(tmp_path: Path, monkeypatch) -> None:

@@ -906,7 +906,14 @@ def test_capture_ocr_runner_submits_left_then_right_ingest_requests_in_increment
         published_latest.append(session_dir_arg)
 
     original_run_subprocess = runtime_module._run_subprocess
+    original_detect_orientation = runtime_module._detect_capture_orientation
+    original_apply_orientation = runtime_module._apply_capture_orientation
     runtime_module._run_subprocess = _fake_run_subprocess
+    runtime_module._detect_capture_orientation = lambda case_dir, *, language: {
+        "rotation_deg": 0,
+        "reason": f"test {case_dir} {language}",
+    }
+    runtime_module._apply_capture_orientation = lambda case_dir, orientation: None
 
     import abr.capture_ocr as capture_ocr_module
     import abr.hardware.double_page_capture as double_page_capture_module
@@ -937,6 +944,8 @@ def test_capture_ocr_runner_submits_left_then_right_ingest_requests_in_increment
         runner(runtime_module.Event(), lambda message: None)
     finally:
         runtime_module._run_subprocess = original_run_subprocess
+        runtime_module._detect_capture_orientation = original_detect_orientation
+        runtime_module._apply_capture_orientation = original_apply_orientation
         enhance_module.enhance_page_image_path = original_enhance  # type: ignore[method-assign]
         enhance_module._write_manifest = original_manifest  # type: ignore[method-assign]
         capture_ocr_module.run_capture_ocr_pages = original_run_pages  # type: ignore[method-assign]
@@ -2857,6 +2866,34 @@ def test_nfc_orientation_swaps_camera_pages_only_for_reader1(tmp_path: Path, mon
     assert left.read_bytes() == b"camera-right"
     assert right.read_bytes() == b"camera-left"
     assert rotated_paths == [(right, 180), (right, 180)]
+
+
+def test_ocr_orientation_maps_upright_to_reader2_and_upside_down_to_reader1(tmp_path: Path, monkeypatch) -> None:
+    case_dir = tmp_path / "case"
+    case_dir.mkdir()
+    decisions = iter((0, 180))
+    applied: list[str] = []
+
+    monkeypatch.setattr(
+        runtime_module,
+        "_detect_capture_orientation",
+        lambda case_dir, *, language: {
+            "rotation_deg": next(decisions),
+            "reason": language,
+        },
+    )
+    monkeypatch.setattr(
+        runtime_module,
+        "_apply_capture_orientation",
+        lambda case_dir, orientation: applied.append(orientation),
+    )
+
+    for _ in range(2):
+        result = runtime_module._detect_capture_orientation(case_dir, language="de")
+        orientation = "reader1" if result["rotation_deg"] == 180 else "reader2"
+        runtime_module._apply_capture_orientation(case_dir, orientation)
+
+    assert applied == ["reader2", "reader1"]
 
 
 def test_camera_assignment_log_data_follows_orientation_swap() -> None:

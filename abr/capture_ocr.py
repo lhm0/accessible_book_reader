@@ -22,6 +22,9 @@ PAGE_SLOT_NAMES = {
     "page_2": "right",
 }
 ORIENTATION_SCORE_EPSILON = 0.02
+ORIENTATION_LINE_COUNT = 3
+ORIENTATION_CLASSIFIER_MIN_CONFIDENCE = 0.80
+ORIENTATION_VOTE_MARGIN = 0.35
 
 
 @dataclass(slots=True)
@@ -373,6 +376,98 @@ def _run_capture_ocr_page(
 
 def _avg_confidence(lines: list[OCRLine]) -> float:
     return sum(line.confidence for line in lines) / max(1, len(lines))
+
+
+def detect_page_orientation_from_text_lines(
+    image: ImageArray,
+    ocr_backend,
+    *,
+    language: str = "de",
+) -> dict[str, object]:
+    """Determine 0/180 page orientation from three inexpensive line crops."""
+    started = time.monotonic()
+    line_images, line_boxes = _select_orientation_line_images(image, count=ORIENTATION_LINE_COUNT)
+    selection_sec = time.monotonic() - started
+
+    classifier_started = time.monotonic()
+    classifications = ocr_backend.classify_text_orientation(line_images, language=language)
+    classifier_sec = time.monotonic() - classifier_started
+
+    accepted = [
+        (label, confidence)
+        for label, confidence in classifications
+        if confidence >= ORIENTATION_CLASSIFIER_MIN_CONFIDENCE
+    ]
+    vote_0 = sum(confidence for label, confidence in accepted if label == "0")
+    vote_180 = sum(confidence for label, confidence in accepted if label == "180")
+    rotation_deg = 180 if vote_180 > vote_0 + ORIENTATION_VOTE_MARGIN else 0
+    reason = (
+        f"textline-classifier boxes={line_boxes}, results={classifications}, "
+        f"accepted={len(accepted)}/{len(classifications)}, votes=0:{vote_0:.3f},"
+        f"180:{vote_180:.3f}, margin={ORIENTATION_VOTE_MARGIN:.3f}"
+    )
+    return {
+        "rotation_deg": rotation_deg,
+        "reason": reason,
+        "line_boxes": line_boxes,
+        "classifications": classifications,
+        "timings": {
+            "orientation_line_selection_sec": selection_sec,
+            "orientation_classifier_sec": classifier_sec,
+            "orientation_sec": selection_sec + classifier_sec,
+        },
+    }
+
+
+def _select_orientation_line_images(
+    image: ImageArray,
+    *,
+    count: int = ORIENTATION_LINE_COUNT,
+) -> tuple[list[ImageArray], list[tuple[int, int, int, int]]]:
+    """Find likely long text rows using a cheap horizontal ink projection."""
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    height, width = gray.shape[:2]
+    inverted = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)[1]
+    kernel_width = max(15, width // 80)
+    joined = cv2.morphologyEx(
+        inverted,
+        cv2.MORPH_CLOSE,
+        cv2.getStructuringElement(cv2.MORPH_RECT, (kernel_width, 3)),
+    )
+    contours = cv2.findContours(joined, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)[0]
+    candidates: list[tuple[float, tuple[int, int, int, int]]] = []
+    for contour in contours:
+        x, y, w, h = cv2.boundingRect(contour)
+        if w < width * 0.18 or h < max(8, height * 0.003) or h > height * 0.08:
+            continue
+        aspect = w / max(1, h)
+        if aspect < 3.0:
+            continue
+        candidates.append((float(w * min(aspect, 20.0)), (x, y, w, h)))
+
+    selected: list[tuple[int, int, int, int]] = []
+    min_vertical_distance = max(12, height // 20)
+    for _score, box in sorted(candidates, reverse=True):
+        center_y = box[1] + box[3] // 2
+        if any(abs(center_y - (other[1] + other[3] // 2)) < min_vertical_distance for other in selected):
+            continue
+        selected.append(box)
+        if len(selected) == count:
+            break
+    selected.sort(key=lambda box: box[1])
+
+    crops: list[ImageArray] = []
+    padded_boxes: list[tuple[int, int, int, int]] = []
+    for x, y, w, h in selected:
+        pad_x = max(4, w // 50)
+        pad_y = max(3, h // 3)
+        x0 = max(0, x - pad_x)
+        y0 = max(0, y - pad_y)
+        x1 = min(width, x + w + pad_x)
+        y1 = min(height, y + h + pad_y)
+        crops.append(image[y0:y1, x0:x1].copy())
+        padded_boxes.append((x0, y0, x1 - x0, y1 - y0))
+    return crops, padded_boxes
 
 
 _VALID_WORD = re.compile(r"[A-Za-zÄÖÜäöüß]{2,}")

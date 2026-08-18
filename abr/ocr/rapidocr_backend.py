@@ -117,6 +117,29 @@ class RapidOCRBackend(OCRBackend):
             line.metadata["ocr_model_profile"] = model_profile
         return lines
 
+    def classify_text_orientation(
+        self,
+        images: list[object],
+        language: str = "de",
+    ) -> list[tuple[str, float]]:
+        """Classify cropped text lines as upright (0) or upside down (180)."""
+        engine = self._get_engine(language.strip().lower())
+        classifications: list[tuple[str, float]] = []
+        for image in images:
+            result = engine(image, use_det=False, use_cls=True, use_rec=False)
+            output = self._normalize_output(result)
+            cls_res = getattr(output, "cls_res", None)
+            if cls_res is None and isinstance(output, dict):
+                cls_res = output.get("cls_res")
+            if not cls_res:
+                continue
+            label, confidence = cls_res[0]
+            normalized_label = str(label)
+            if normalized_label not in {"0", "180"}:
+                continue
+            classifications.append((normalized_label, float(confidence)))
+        return classifications
+
     def _normalize_output(self, result: object) -> object:
         if isinstance(result, tuple) and result:
             return result[0]

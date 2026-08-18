@@ -165,6 +165,27 @@ def test_rapidocr_backend_treats_empty_output_object_as_empty_page() -> None:
     assert lines == []
 
 
+def test_rapidocr_backend_exposes_textline_orientation_classifier() -> None:
+    calls: list[dict[str, object]] = []
+
+    class FakeRapidOCR:
+        def __call__(self, image, **kwargs):
+            del image
+            calls.append(kwargs)
+            return SimpleNamespace(cls_res=[("180", 0.97)])
+
+    backend = RapidOCRBackend()
+    backend._engines["de"] = FakeRapidOCR()
+
+    result = backend.classify_text_orientation([object(), object()], language="de")
+
+    assert result == [("180", 0.97), ("180", 0.97)]
+    assert calls == [
+        {"use_det": False, "use_cls": True, "use_rec": False},
+        {"use_det": False, "use_cls": True, "use_rec": False},
+    ]
+
+
 def test_rapidocr_backend_keeps_german_constructor_unchanged() -> None:
     constructor_calls: list[dict[str, object]] = []
 

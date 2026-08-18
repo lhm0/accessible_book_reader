@@ -32,6 +32,27 @@ def test_textline_orientation_uses_three_lines_and_rotates_on_confident_vote() -
     assert "votes=0:0.810,180:1.940" in result["reason"]
 
 
+def test_textline_orientation_accepts_weighted_real_pi_vote() -> None:
+    image = np.full((600, 900, 3), 255, dtype=np.uint8)
+    for y in (120, 260, 400):
+        cv2.putText(image, "Eine ausreichend lange Textzeile", (80, y), cv2.FONT_HERSHEY_SIMPLEX, 1.1, (0, 0, 0), 2)
+
+    class FakeBackend:
+        def classify_text_orientation(self, images, language: str = "en"):
+            assert len(images) == 3
+            return [
+                ("180", 0.5964645147323608),
+                ("180", 0.9839293956756592),
+                ("0", 0.5595273375511169),
+            ]
+
+    result = detect_page_orientation_from_text_lines(image, FakeBackend(), language="en")
+
+    assert result["rotation_deg"] == 180
+    assert "accepted=3/3" in result["reason"]
+    assert "votes=0:0.560,180:1.580" in result["reason"]
+
+
 def test_textline_orientation_rejects_missing_lines_instead_of_guessing_zero() -> None:
     image = np.full((200, 300, 3), 255, dtype=np.uint8)
 

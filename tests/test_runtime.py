@@ -909,7 +909,7 @@ def test_capture_ocr_runner_submits_left_then_right_ingest_requests_in_increment
     original_detect_orientation = runtime_module._detect_capture_orientation
     original_apply_orientation = runtime_module._apply_capture_orientation
     runtime_module._run_subprocess = _fake_run_subprocess
-    runtime_module._detect_capture_orientation = lambda case_dir, *, language: {
+    runtime_module._detect_capture_orientation = lambda case_dir, *, language, preprocess_config: {
         "rotation_deg": 0,
         "reason": f"test {case_dir} {language}",
     }
@@ -2877,7 +2877,7 @@ def test_ocr_orientation_maps_upright_to_reader2_and_upside_down_to_reader1(tmp_
     monkeypatch.setattr(
         runtime_module,
         "_detect_capture_orientation",
-        lambda case_dir, *, language: {
+        lambda case_dir, *, language, preprocess_config: {
             "rotation_deg": next(decisions),
             "reason": language,
         },
@@ -2889,7 +2889,11 @@ def test_ocr_orientation_maps_upright_to_reader2_and_upside_down_to_reader1(tmp_
     )
 
     for _ in range(2):
-        result = runtime_module._detect_capture_orientation(case_dir, language="de")
+        result = runtime_module._detect_capture_orientation(
+            case_dir,
+            language="de",
+            preprocess_config=object(),
+        )
         orientation = "reader1" if result["rotation_deg"] == 180 else "reader2"
         runtime_module._apply_capture_orientation(case_dir, orientation)
 

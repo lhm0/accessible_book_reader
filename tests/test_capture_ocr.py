@@ -32,7 +32,7 @@ def test_textline_orientation_uses_three_lines_and_rotates_on_confident_vote() -
     assert "votes=0:0.810,180:1.940" in result["reason"]
 
 
-def test_textline_orientation_falls_back_to_zero_without_reliable_lines() -> None:
+def test_textline_orientation_rejects_missing_lines_instead_of_guessing_zero() -> None:
     image = np.full((200, 300, 3), 255, dtype=np.uint8)
 
     class FakeBackend:
@@ -41,9 +41,12 @@ def test_textline_orientation_falls_back_to_zero_without_reliable_lines() -> Non
             assert images == []
             return []
 
-    result = detect_page_orientation_from_text_lines(image, FakeBackend())
-
-    assert result["rotation_deg"] == 0
+    try:
+        detect_page_orientation_from_text_lines(image, FakeBackend())
+    except RuntimeError as exc:
+        assert "nur 0 von 3 Textzeilen" in str(exc)
+    else:
+        raise AssertionError("Expected missing orientation lines to abort")
 
 
 def test_run_capture_ocr_writes_left_before_processing_right(tmp_path: Path, monkeypatch) -> None:

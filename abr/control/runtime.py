@@ -1870,7 +1870,11 @@ def _build_capture_ocr_runner(
             progress_callback(f"OCR abgeschlossen, Ergebnis archiviert unter {stable_output_dir}.")
         else:
             case_dir = session_dir / "case"
-            orientation_result = _detect_capture_orientation(case_dir, language=config.language)
+            orientation_result = _detect_capture_orientation(
+                case_dir,
+                language=config.language,
+                preprocess_config=default_preprocess_config,
+            )
             orientation = "reader1" if int(orientation_result["rotation_deg"]) == 180 else "reader2"
             progress_callback(f"OCR-Orientierung: {orientation_result['reason']}.")
             _apply_capture_orientation(case_dir, orientation)
@@ -2039,18 +2043,30 @@ def _apply_capture_orientation(case_dir: Path, orientation: str) -> None:
     apply_rotation_in_place(case_dir / "right.jpg", 180)
 
 
-def _detect_capture_orientation(case_dir: Path, *, language: str) -> dict[str, object]:
+def _detect_capture_orientation(
+    case_dir: Path,
+    *,
+    language: str,
+    preprocess_config,
+) -> dict[str, object]:
     import cv2
 
     from abr.capture_ocr import detect_page_orientation_from_text_lines
     from abr.ocr.factory import create_ocr_backend
+    from abr.preprocessing.enhance_for_ocr import preprocess_image
 
     probe_path = case_dir / "left.jpg"
     orientation_probe = cv2.imread(str(probe_path), cv2.IMREAD_COLOR)
     if orientation_probe is None:
         raise FileNotFoundError(f"Orientierungsbild konnte nicht geladen werden: {probe_path}")
-    return detect_page_orientation_from_text_lines(
+    prepared_probe = preprocess_image(
         orientation_probe,
+        config=preprocess_config,
+        page_id="page_1",
+        source_path=probe_path,
+    ).ocr_input
+    return detect_page_orientation_from_text_lines(
+        prepared_probe,
         create_ocr_backend("rapidocr"),
         language=language,
     )

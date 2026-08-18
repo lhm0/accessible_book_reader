@@ -398,9 +398,28 @@ def detect_page_orientation_from_text_lines(
         for label, confidence in classifications
         if confidence >= ORIENTATION_CLASSIFIER_MIN_CONFIDENCE
     ]
+    if len(line_images) < ORIENTATION_LINE_COUNT:
+        raise RuntimeError(
+            "OCR-Orientierung nicht bestimmbar: "
+            f"nur {len(line_images)} von {ORIENTATION_LINE_COUNT} Textzeilen gefunden."
+        )
+    if len(accepted) < 2:
+        raise RuntimeError(
+            "OCR-Orientierung nicht bestimmbar: "
+            f"nur {len(accepted)} verlaessliche Klassifikationen erhalten."
+        )
     vote_0 = sum(confidence for label, confidence in accepted if label == "0")
     vote_180 = sum(confidence for label, confidence in accepted if label == "180")
-    rotation_deg = 180 if vote_180 > vote_0 + ORIENTATION_VOTE_MARGIN else 0
+    if vote_180 > vote_0 + ORIENTATION_VOTE_MARGIN:
+        rotation_deg = 180
+    elif vote_0 > vote_180 + ORIENTATION_VOTE_MARGIN:
+        rotation_deg = 0
+    else:
+        raise RuntimeError(
+            "OCR-Orientierung nicht eindeutig: "
+            f"votes=0:{vote_0:.3f},180:{vote_180:.3f}, "
+            f"erforderlicher Vorsprung={ORIENTATION_VOTE_MARGIN:.3f}."
+        )
     reason = (
         f"textline-classifier boxes={line_boxes}, results={classifications}, "
         f"accepted={len(accepted)}/{len(classifications)}, votes=0:{vote_0:.3f},"

@@ -2900,6 +2900,50 @@ def test_ocr_orientation_maps_upright_to_reader2_and_upside_down_to_reader1(tmp_
     assert applied == ["reader2", "reader1"]
 
 
+def test_capture_orientation_uses_and_updates_per_book_marker(tmp_path: Path, monkeypatch) -> None:
+    from abr.capture_ocr import OrientationDetectionError
+    from abr.preprocessing.processor import PreprocessorConfig
+
+    store = runtime_module.BookStore(tmp_path / "library")
+    store.ensure_book("BOOK1")
+    results = iter(
+        (
+            {"rotation_deg": 180, "reason": "three lines"},
+            OrientationDetectionError("nur eine Textzeile"),
+        )
+    )
+
+    def fake_detect(case_dir, *, language, preprocess_config):
+        del case_dir, language, preprocess_config
+        result = next(results)
+        if isinstance(result, BaseException):
+            raise result
+        return result
+
+    monkeypatch.setattr(runtime_module, "_detect_capture_orientation", fake_detect)
+
+    detected, detected_message = runtime_module._resolve_capture_orientation(
+        tmp_path / "case",
+        language="en",
+        preprocess_config=PreprocessorConfig(),
+        store=store,
+        tag_id="BOOK1",
+    )
+    fallback, fallback_message = runtime_module._resolve_capture_orientation(
+        tmp_path / "case",
+        language="en",
+        preprocess_config=PreprocessorConfig(),
+        store=store,
+        tag_id="BOOK1",
+    )
+
+    assert detected == "reader1"
+    assert "Merker auf reader1 aktualisiert" in detected_message
+    assert store.load_page_orientation("BOOK1") == "reader1"
+    assert fallback == "reader1"
+    assert "gespeicherter Merker reader1" in fallback_message
+
+
 def test_camera_assignment_log_data_follows_orientation_swap() -> None:
     metadata = {
         "slots": {

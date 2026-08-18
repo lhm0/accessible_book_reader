@@ -866,6 +866,7 @@ class ForegroundJobManager:
         tag_id: str | None = None,
         book_context_resolver: Callable[[], CaptureBookContext | None] | None = None,
         page_ingest_submitter: Callable[[PageIngestRequest], Event | None] | None = None,
+        orientation_store: BookStore | None = None,
     ) -> ForegroundJobHandle:
         spec = ForegroundJobSpec(
             job_type=ForegroundJobType.CAPTURE_OCR,
@@ -875,6 +876,7 @@ class ForegroundJobManager:
                 tag_id=tag_id,
                 book_context_resolver=book_context_resolver,
                 page_ingest_submitter=page_ingest_submitter,
+                orientation_store=orientation_store,
             ),
         )
         return self.start_foreground_job(spec)
@@ -1201,6 +1203,9 @@ class RuntimeController:
                             tag_id=tag_id,
                             book_context_resolver=self._fetch_capture_book_context if async_nfc else None,
                             page_ingest_submitter=self.page_ingest_service.submit,
+                            orientation_store=BookStore(
+                                self.page_ingest_config.library_root.expanduser().resolve()
+                            ),
                         )
                     else:
                         self.job_manager.start_capture_ocr(self.capture_ocr_config)
@@ -1793,6 +1798,7 @@ def _build_capture_ocr_runner(
     tag_id: str | None = None,
     book_context_resolver: Callable[[], CaptureBookContext | None] | None = None,
     page_ingest_submitter: Callable[[PageIngestRequest], Event | None] | None = None,
+    orientation_store: BookStore | None = None,
 ) -> Callable[[Event, Callable[[str], None]], None]:
     from abr.capture_ocr import run_capture_ocr_pages, write_capture_ocr_report
     from abr.hardware.double_page_capture import publish_latest
@@ -1870,13 +1876,14 @@ def _build_capture_ocr_runner(
             progress_callback(f"OCR abgeschlossen, Ergebnis archiviert unter {stable_output_dir}.")
         else:
             case_dir = session_dir / "case"
-            orientation_result = _detect_capture_orientation(
+            orientation, orientation_message = _resolve_capture_orientation(
                 case_dir,
                 language=config.language,
                 preprocess_config=default_preprocess_config,
+                store=orientation_store,
+                tag_id=resolved_tag_id,
             )
-            orientation = "reader1" if int(orientation_result["rotation_deg"]) == 180 else "reader2"
-            progress_callback(f"OCR-Orientierung: {orientation_result['reason']}.")
+            progress_callback(orientation_message)
             _apply_capture_orientation(case_dir, orientation)
             preprocess_config = _preprocess_config_for_orientation(default_preprocess_config, orientation)
             if orientation is not None:
@@ -2070,6 +2077,36 @@ def _detect_capture_orientation(
         create_ocr_backend("rapidocr"),
         language=language,
     )
+
+
+def _resolve_capture_orientation(
+    case_dir: Path,
+    *,
+    language: str,
+    preprocess_config,
+    store: BookStore | None,
+    tag_id: str | None,
+) -> tuple[str, str]:
+    from abr.capture_ocr import OrientationDetectionError
+
+    try:
+        result = _detect_capture_orientation(
+            case_dir,
+            language=language,
+            preprocess_config=preprocess_config,
+        )
+    except OrientationDetectionError as exc:
+        orientation = (
+            store.load_page_orientation(tag_id)
+            if store is not None and tag_id is not None
+            else BookStore.DEFAULT_PAGE_ORIENTATION
+        )
+        return orientation, f"OCR-Orientierung nicht bestimmbar ({exc}); gespeicherter Merker {orientation} wird verwendet."
+
+    orientation = "reader1" if int(result["rotation_deg"]) == 180 else "reader2"
+    if store is not None and tag_id is not None:
+        store.save_page_orientation(tag_id, orientation, source="ocr")
+    return orientation, f"OCR-Orientierung: {result['reason']}; Merker auf {orientation} aktualisiert."
 
 
 def _preprocess_config_for_orientation(default_config, orientation: str | None):

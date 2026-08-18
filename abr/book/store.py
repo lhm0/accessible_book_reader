@@ -13,6 +13,8 @@ from abr.book.models import BookRecord, ChapterRecord, PageRecord, ScanRecord, S
 
 class BookStore:
     ISO15693_TAGS_FILENAME = "iso15693_tag_ids.txt"
+    PAGE_ORIENTATION_STATE_FILENAME = "page_orientation.json"
+    DEFAULT_PAGE_ORIENTATION = "reader2"
 
     def __init__(self, library_root: Path) -> None:
         self.library_root = Path(library_root)
@@ -182,6 +184,23 @@ class BookStore:
             raise RuntimeError(f"Ungueltiger Runtime-State in {path}")
         return payload
 
+    def load_page_orientation(self, tag_id: str) -> str:
+        self._ensure_book_layout(tag_id)
+        payload = self.load_runtime_state(tag_id, self.PAGE_ORIENTATION_STATE_FILENAME)
+        orientation = payload.get("orientation") if payload is not None else None
+        if orientation not in {"reader1", "reader2"}:
+            raise RuntimeError(f"Ungueltiger Seitenorientierungsmerker fuer Buch {normalize_tag_id(tag_id)}")
+        return str(orientation)
+
+    def save_page_orientation(self, tag_id: str, orientation: str, *, source: str = "ocr") -> Path:
+        if orientation not in {"reader1", "reader2"}:
+            raise ValueError(f"Ungueltige Seitenorientierung: {orientation!r}")
+        return self.save_runtime_state(
+            tag_id,
+            self.PAGE_ORIENTATION_STATE_FILENAME,
+            {"orientation": orientation, "source": source, "updated_at": utc_now()},
+        )
+
     def delete_book(self, tag_id: str) -> bool:
         book_dir = self.book_dir(tag_id)
         if not book_dir.exists():
@@ -223,6 +242,16 @@ class BookStore:
         book_dir = self.book_dir(tag_id)
         for relative_dir in ("state", "scans", "pages", "chapters", "summaries"):
             (book_dir / relative_dir).mkdir(parents=True, exist_ok=True)
+        orientation_path = book_dir / "state" / self.PAGE_ORIENTATION_STATE_FILENAME
+        if not orientation_path.exists():
+            _write_json(
+                orientation_path,
+                {
+                    "orientation": self.DEFAULT_PAGE_ORIENTATION,
+                    "source": "default",
+                    "updated_at": utc_now(),
+                },
+            )
 
 
 def page_storage_key(record: PageRecord) -> str:

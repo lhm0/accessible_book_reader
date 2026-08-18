@@ -27,6 +27,10 @@ ORIENTATION_CLASSIFIER_MIN_CONFIDENCE = 0.55
 ORIENTATION_VOTE_MARGIN = 0.35
 
 
+class OrientationDetectionError(RuntimeError):
+    """Raised when page text does not support a reliable 0/180 decision."""
+
+
 @dataclass(slots=True)
 class OCRPageResult:
     page_id: str
@@ -403,12 +407,12 @@ def detect_page_orientation_from_text_lines(
         if confidence >= ORIENTATION_CLASSIFIER_MIN_CONFIDENCE
     ]
     if len(line_images) < ORIENTATION_LINE_COUNT:
-        raise RuntimeError(
+        raise OrientationDetectionError(
             "OCR-Orientierung nicht bestimmbar: "
             f"nur {len(line_images)} von {ORIENTATION_LINE_COUNT} Textzeilen gefunden."
         )
     if len(accepted) < 2:
-        raise RuntimeError(
+        raise OrientationDetectionError(
             "OCR-Orientierung nicht bestimmbar: "
             f"nur {len(accepted)} verlaessliche Klassifikationen erhalten."
         )
@@ -419,7 +423,7 @@ def detect_page_orientation_from_text_lines(
     elif vote_0 > vote_180 + ORIENTATION_VOTE_MARGIN:
         rotation_deg = 0
     else:
-        raise RuntimeError(
+        raise OrientationDetectionError(
             "OCR-Orientierung nicht eindeutig: "
             f"votes=0:{vote_0:.3f},180:{vote_180:.3f}, "
             f"erforderlicher Vorsprung={ORIENTATION_VOTE_MARGIN:.3f}."

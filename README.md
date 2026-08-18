@@ -316,7 +316,7 @@ beschrieben.
 | `~/.config/abr/device.json` | Buchsprache; durch `install_language_switch.sh` | Nein |
 | `~/.config/abr/mail.ini` | Mailkonto und Empfaenger; neutrale Vorlage durch `install_remote_mail.sh` | Nein |
 | NetworkManager-Profile | SSIDs und WLAN-Passwoerter; interaktiv mit `abr.wifi_profiles` | Nein |
-| `/etc/systemd/system/abr-*.service` und `abr-*.timer` | Lokale Benutzer- und Projektpfade; durch die Installer erzeugt | Nein |
+| `/etc/systemd/system/abr-*.service` und `abr-*.timer` | Lokale Benutzer- und Projektpfade; durch die jeweiligen Dienst-Installer erzeugt | Nein |
 | `calibration/out/cam0_planar.npz`, `cam1_planar.npz` | Mitgelieferte Referenzkalibrierung; fuer abweichende Kameramechanik neu erzeugen | Ja |
 
 Es gibt keine erforderliche `.env`-Datei. API-Schluessel fuer optionale

@@ -2,7 +2,6 @@
 set -eu
 
 repo_dir=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-abr_user=${SUDO_USER:-$(id -un)}
 python="$repo_dir/.venv/bin/python"
 target=/etc/systemd/system/abr-wifi-autoconnect.service
 
@@ -15,13 +14,16 @@ if [ ! -x "$python" ]; then
     exit 1
 fi
 
-sed \
-    -e "s|__ABR_USER__|$abr_user|g" \
-    -e "s|__ABR_REPO__|$repo_dir|g" \
-    -e "s|__ABR_PYTHON__|$python|g" \
-    "$repo_dir/deploy/abr-wifi-autoconnect.service" > "$target"
+# Aeltere Installationen verwendeten hier eine systemd-Unit als normaler
+# Benutzer. NetworkManager verweigert diesem nicht-interaktiven Prozess das
+# Aendern systemweiter Profile. Die Einstellungen sind persistent, daher ist
+# kein privilegierter ABR-Dienst bei jedem Boot erforderlich.
+if [ -e "$target" ]; then
+    systemctl disable --now abr-wifi-autoconnect.service 2>/dev/null || true
+    rm -f "$target"
+    systemctl daemon-reload
+    systemctl reset-failed abr-wifi-autoconnect.service 2>/dev/null || true
+fi
 
-chmod 644 "$target"
-systemctl daemon-reload
-systemctl enable --now abr-wifi-autoconnect.service
-echo "Installiert. Status: systemctl status abr-wifi-autoconnect.service"
+"$python" -m abr.wifi_profiles configure
+echo "WLAN-Autoconnect ist in den gespeicherten NetworkManager-Profilen konfiguriert."

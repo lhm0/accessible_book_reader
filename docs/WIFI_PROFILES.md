@@ -116,19 +116,19 @@ sudo .venv/bin/python -m abr.wifi_profiles add Zuhause MeinWLAN --priority 20
 sudo .venv/bin/python -m abr.wifi_profiles add Mobil MeinHotspot --priority 10
 ```
 
-## Absicherung beim Boot
+## Persistente Autoconnect-Konfiguration
 
-NetworkManager fuehrt Autoconnect selbst aus. Die zusaetzliche One-shot-Unit
-stellt bei jedem Boot sicher, dass auch spaeter extern angelegte WLAN-Profile
-Autoconnect und unbegrenzte Wiederholungen verwenden:
+NetworkManager speichert die Autoconnect-Eigenschaften direkt in seinen
+Verbindungsprofilen und wendet sie bei jedem Boot selbst an. Der Installer
+setzt diese Eigenschaften einmalig mit den bereits durch `sudo` erteilten
+Rechten:
 
 ```bash
 cd ~/src/abr
 sudo deploy/install_wifi_autoconnect.sh
-systemctl status abr-wifi-autoconnect.service --no-pager
 ```
 
-Nach erfolgreichem Lauf ist `active (exited)` der erwartete Zustand. Kontrolle:
+Kontrolle:
 
 ```bash
 sudo .venv/bin/python -m abr.wifi_profiles list
@@ -136,5 +136,11 @@ nmcli connection show
 nmcli device status
 ```
 
-Der Installer setzt Benutzer-, Repository- und Pythonpfad passend zur lokalen
-Installation in die systemd-Unit ein.
+Der Installer aktiviert keine Verbindung und wechselt kein WLAN; er aendert
+ausschliesslich die persistenten Autoconnect-Eigenschaften bereits
+gespeicherter Profile. Eine fruehere Version installierte dafuer
+`abr-wifi-autoconnect.service`. Diese Unit scheiterte ohne Root-Rechte und
+waere mit Root-Rechten unnoetig weitreichend. Der aktuelle Installer
+deaktiviert und entfernt sie bei einem Update. Spaeter extern angelegte
+Profile werden bei Bedarf durch erneuten Aufruf des Installers oder durch
+`abr.wifi_profiles configure` einbezogen.

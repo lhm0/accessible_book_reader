@@ -884,6 +884,12 @@ Aktueller, am Pi bestaetigter Stand:
 - `switch` aktiviert gezielt einen Profilnamen oder eine UUID
 - `configure` setzt fuer alle WLAN-Profile `connection.autoconnect=yes` und
   `connection.autoconnect-retries=0`
+- der fruehere `abr-wifi-autoconnect.service` scheiterte als normaler
+  Dienstbenutzer reproduzierbar mit `Insufficient privileges`; er wird nicht
+  als Root-Dienst weitergefuehrt
+- `install_wifi_autoconnect.sh` setzt die persistenten Eigenschaften einmalig
+  mit den ohnehin durch `sudo` erteilten Rechten und entfernt die alte Unit;
+  NetworkManager uebernimmt danach selbst das Verhalten bei jedem Boot
 - NetworkManager waehlt dadurch beim Boot oder nach Verbindungsverlust ein
   erreichbares gespeichertes Netz
 - disruptive Befehle erfordern in einer erkannten SSH-Sitzung die bewusste
@@ -908,7 +914,7 @@ nmcli -g 802-11-wireless.ssid connection show "Example WiFi"
 
 Optionale Boot-Absicherung:
 
-- Unit: `deploy/abr-wifi-autoconnect.service`
+- Installer: `deploy/install_wifi_autoconnect.sh`
 - vollstaendige Anleitung:
   [docs/WIFI_PROFILES.md](../docs/WIFI_PROFILES.md)
 
@@ -1040,7 +1046,7 @@ Aktueller Sonderfall:
 - [deploy/install_usage_statistics.sh](../deploy/install_usage_statistics.sh)
 - [docs/USAGE_STATISTICS.md](../docs/USAGE_STATISTICS.md)
 - [abr/wifi_profiles.py](../abr/wifi_profiles.py)
-- [deploy/abr-wifi-autoconnect.service](../deploy/abr-wifi-autoconnect.service)
+- [deploy/install_wifi_autoconnect.sh](../deploy/install_wifi_autoconnect.sh)
 - [docs/WIFI_PROFILES.md](../docs/WIFI_PROFILES.md)
 - [docs/SYSTEMD_CONTROL_PANEL_SERVICE.md](../docs/SYSTEMD_CONTROL_PANEL_SERVICE.md)
 - [hardware/pn5180_gateway_client.py](../hardware/pn5180_gateway_client.py)

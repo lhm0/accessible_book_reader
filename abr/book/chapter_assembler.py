@@ -157,6 +157,7 @@ class ChapterAssembler:
             if not pages:
                 break
             resolved_start = _resolve_boundary(state.current_start, pages)
+            state = self._refresh_resolved_start(normalized_tag_id, state, resolved_start)
             candidate = self._find_next_boundary(resolved_start, pages)
             if candidate is None:
                 break
@@ -187,6 +188,7 @@ class ChapterAssembler:
             )
         state = self._load_or_initialize_state(normalized_tag_id, pages)
         resolved_start = _resolve_boundary(state.current_start, pages)
+        self._refresh_resolved_start(normalized_tag_id, state, resolved_start)
         terminal_page_index = len(pages) - 1
         terminal_page = pages[terminal_page_index]
         segments = _collect_chapter_segments(
@@ -328,6 +330,22 @@ class ChapterAssembler:
     def _save_state(self, tag_id: str, state: _AssemblerState) -> None:
         self.store.save_runtime_state(tag_id, self.config.state_filename, state.to_dict())
 
+    def _refresh_resolved_start(
+        self,
+        tag_id: str,
+        state: _AssemblerState,
+        resolved_start: _ResolvedBoundary,
+    ) -> _AssemblerState:
+        """Persist the canonical page identity after resolving a replaced placeholder."""
+        if state.current_start == resolved_start.boundary:
+            return state
+        refreshed = _AssemblerState(
+            current_start=resolved_start.boundary,
+            next_sequence=state.next_sequence,
+        )
+        self._save_state(tag_id, refreshed)
+        return refreshed
+
 
 def _build_chapter_text(
     pages: list[PageRecord],
@@ -397,6 +415,9 @@ def _resolve_boundary(boundary: ChapterBoundary, pages: list[PageRecord]) -> _Re
             return _ResolvedBoundary(boundary=ChapterBoundary.from_page(page, offset=boundary.offset), page_index=index, page=page, offset=_safe_offset(page.clean_text, boundary.offset))
     for index, page in enumerate(pages):
         if boundary.scan_id and boundary.side and page.scan_id == boundary.scan_id and page.side == boundary.side:
+            return _ResolvedBoundary(boundary=ChapterBoundary.from_page(page, offset=boundary.offset), page_index=index, page=page, offset=_safe_offset(page.clean_text, boundary.offset))
+    for index, page in enumerate(pages):
+        if page.metadata.get("report_page_id") == boundary.page_id:
             return _ResolvedBoundary(boundary=ChapterBoundary.from_page(page, offset=boundary.offset), page_index=index, page=page, offset=_safe_offset(page.clean_text, boundary.offset))
     raise RuntimeError(f"ChapterAssembler konnte Startgrenze nicht aufloesen: {boundary.page_id}")
 

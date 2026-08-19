@@ -179,3 +179,63 @@ def test_chapter_assembler_keeps_scan_order_when_initial_pages_have_no_page_numb
     chapter = result.created_chapters[0]
     assert chapter.page_ids[:2] == ["page_1", "page_2"]
     assert chapter.page_numbers == list(range(8, 26))
+
+
+def test_chapter_assembler_repairs_state_after_placeholder_was_numbered(tmp_path: Path) -> None:
+    store = BookStore(tmp_path / "library")
+    store.ensure_book("BOOK4")
+    assembler = ChapterAssembler(store)
+    store.save_page(
+        "BOOK4",
+        PageRecord(
+            page_id="page_0008",
+            scan_id="scan_001",
+            created_at="2026-08-18T10:00:00Z",
+            side="left",
+            clean_text="Die erste Seite des offenen Abschnitts.",
+            speak_text="Die erste Seite des offenen Abschnitts.",
+            page_number=8,
+            metadata={"report_page_id": "page_1", "language": "de"},
+        ),
+    )
+    store.save_page(
+        "BOOK4",
+        PageRecord(
+            page_id="page_0009",
+            scan_id="scan_001",
+            created_at="2026-08-18T10:00:00Z",
+            side="right",
+            clean_text="Die zweite Seite.",
+            speak_text="Die zweite Seite.",
+            page_number=9,
+            metadata={"report_page_id": "page_2", "language": "de"},
+        ),
+    )
+    store.save_runtime_state(
+        "BOOK4",
+        "chapter_assembler_state.json",
+        {
+            "current_start": {
+                "page_id": "page_1",
+                "offset": 0,
+                "page_number": None,
+                "side": None,
+                "scan_id": None,
+            },
+            "next_sequence": 1,
+        },
+    )
+
+    pending = assembler.collect_pending_content("BOOK4")
+
+    assert pending.page_ids == ("page_0008", "page_0009")
+    assert pending.page_numbers == (8, 9)
+    state = store.load_runtime_state("BOOK4", "chapter_assembler_state.json")
+    assert state is not None
+    assert state["current_start"] == {
+        "page_id": "page_0008",
+        "offset": 0,
+        "page_number": 8,
+        "side": "left",
+        "scan_id": "scan_001",
+    }

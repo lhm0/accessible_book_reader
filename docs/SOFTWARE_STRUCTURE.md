@@ -23,7 +23,7 @@ The main flow is:
 front-panel event
   -> NFC query through the Pico gateway
   -> capture both cameras
-  -> evaluate NFC result and book orientation
+  -> resolve the book from NFC and classify page orientation from text lines
   -> prepare, recognize, ingest, and read the left page
   -> process the right page in parallel
   -> update section assembly and summaries
@@ -67,7 +67,7 @@ is not the finished device runtime.
 - [pico_gateway_client.py](../abr/hardware/pico_gateway_client.py)
   - shared UART client for the Raspberry Pi Pico gateway
 - [nfc_gateway.py](../abr/hardware/nfc_gateway.py)
-  - reader status, ISO14443A/ISO15693, and orientation interpretation
+  - reader status and ISO14443A/ISO15693 book identification
   - two-stage `STATUS_START` and `STATUS_FETCH` query
 
 The Raspberry Pi contains no direct PN5180 or PN532 driver. Readers connect
@@ -80,8 +80,8 @@ only to the Pico; Pi software sees only the UART protocol.
     `SummaryRecord`, and chapter markers
 - [store.py](../abr/book/store.py)
   - atomic JSON and text storage below `library/<tag_id>/`
-  - primary ISO14443A ID and ISO15693 aliases
-  - persistent runtime state and language validation
+  - preferred ISO14443A IDs, ISO15693 aliases, and direct ISO15693 book IDs
+  - persistent orientation/runtime state and language validation
 - [session.py](../abr/book/session.py)
   - tag-to-book-session resolution
 - [page_ingestor.py](../abr/book/page_ingestor.py)
@@ -106,15 +106,17 @@ the complete data layout.
 
 - [capture_ocr.py](../abr/capture_ocr.py)
   - lightweight regular and incremental OCR execution
+  - selection and voting of three RapidOCR angle-classifier line crops
   - writes reports and optional overlays
 - `abr/preprocessing/`
   - `enhance_for_ocr.py`: production per-page preparation
   - `processor.py`: general preprocessing stages
 - `abr/orientation/detector.py`
-  - optional 0/180-degree detection, disabled in the preferred path
+  - older optional 0/180-degree comparison for non-production pipelines
 - `abr/ocr/`
   - `base.py` and `factory.py`: backend interface and selection
-  - `rapidocr_backend.py`: production local OCR path
+  - `rapidocr_backend.py`: production local OCR plus text-line detection and
+    `0`/`180` angle classification
   - `tesseract_backend.py`: fallback and comparison
   - `paddle_backend.py`: experimental comparison path
 - `abr/layout/basic.py`: basic paragraph and layout blocks

@@ -24,7 +24,7 @@ Der Hauptfluss lautet:
 Frontpanel-Ereignis
   -> NFC-Abfrage am Pico-Gateway
   -> Aufnahme beider Kameras
-  -> NFC-Ergebnis und Buchorientierung auswerten
+  -> Buch ueber NFC zuordnen und Seitenorientierung aus Textzeilen bestimmen
   -> linke Seite vorbereiten, OCR, ingestieren und vorlesen
   -> rechte Seite parallel nachziehen
   -> Abschnittsbildung und Zusammenfassungen aktualisieren
@@ -69,7 +69,7 @@ fertigen Geräts.
 - [pico_gateway_client.py](../abr/hardware/pico_gateway_client.py)
   - gemeinsamer UART-Client für das Raspberry-Pi-Pico-Gateway
 - [nfc_gateway.py](../abr/hardware/nfc_gateway.py)
-  - Auswertung von Readerstatus, ISO14443A/ISO15693 und Orientierung
+  - Auswertung von Readerstatus und ISO14443A-/ISO15693-Buchidentifikation
   - zweistufige Abfrage mit `STATUS_START` und `STATUS_FETCH`
 
 Der Raspberry Pi enthält keinen direkten PN5180- oder PN532-Treiber. Die
@@ -83,8 +83,8 @@ das UART-Protokoll.
     `SummaryRecord` und Kapitelmarker
 - [store.py](../abr/book/store.py)
   - atomare JSON-/Textablage unter `library/<tag_id>/`
-  - führende ISO14443A-ID und ISO15693-Aliase
-  - persistenter Runtime-State und Sprachprüfung
+  - bevorzugte ISO14443A-IDs, ISO15693-Aliase und direkte ISO15693-Buch-IDs
+  - persistenter Orientierungs-/Runtime-State und Sprachprüfung
 - [session.py](../abr/book/session.py)
   - Auflösung eines Tags in eine Buchsession
 - [page_ingestor.py](../abr/book/page_ingestor.py)
@@ -110,15 +110,18 @@ beschrieben.
 
 - [capture_ocr.py](../abr/capture_ocr.py)
   - schlanker normaler und inkrementeller OCR-Lauf
+  - Auswahl und Abstimmung dreier Textzeilen fuer den RapidOCR-
+    Winkelklassifikator
   - schreibt Bericht und optionale Overlays
 - `abr/preprocessing/`
   - `enhance_for_ocr.py`: produktionsnahe Seiteneinzelvorbereitung
   - `processor.py`: allgemeine Vorverarbeitungsstufen
 - `abr/orientation/detector.py`
-  - optionale 0-/180-Grad-Erkennung; im bevorzugten Pfad deaktiviert
+  - aelterer optionaler 0-/180-Grad-Vergleich fuer nichtproduktive Pipelines
 - `abr/ocr/`
   - `base.py` und `factory.py`: Backend-Schnittstelle und Auswahl
-  - `rapidocr_backend.py`: produktiver lokaler OCR-Pfad
+  - `rapidocr_backend.py`: produktiver lokaler OCR-Pfad plus Textzeilensuche
+    und `0`-/`180`-Grad-Klassifikation
   - `tesseract_backend.py`: Fallback und Vergleich
   - `paddle_backend.py`: experimenteller Vergleichspfad
 - `abr/layout/basic.py`

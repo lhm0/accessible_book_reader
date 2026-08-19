@@ -76,12 +76,16 @@ The preferred real-world setup on a Raspberry Pi 5 is:
 The runtime currently behaves as follows:
 
 - PN5180 polling starts immediately with `STATUS_START`
-- both photographs are captured before `STATUS_FETCH` retrieves book identity and orientation
-- `ISO14443A` is the primary book key; a simultaneously detected `ISO15693`
-  tag is stored as an alternative identifier in the book directory
-- reader 2 denotes orientation 1, retaining the captured left/right assignment
-- reader 1 denotes orientation 2, swapping `case/left.jpg` and
-  `case/right.jpg` immediately after `STATUS_FETCH`
+- both photographs are captured before `STATUS_FETCH` retrieves the book identity;
+  NFC reader position is no longer used for page orientation
+- an `ISO14443A` tag remains the preferred book key; a simultaneously detected
+  `ISO15693` tag is stored as an alternative identifier, while a new book can
+  also be created directly from a single `ISO15693` tag
+- before the normal page OCR, RapidOCR detects three long text lines in the
+  prepared left image and classifies them as upright or upside down
+- an upside-down result swaps `case/left.jpg` and `case/right.jpg`
+- each reliable result updates `library/<TAG_ID>/state/page_orientation.json`;
+  text-poor or empty pages use that stored value instead of aborting
 - `case/right.jpg` is then rotated by 180 degrees exactly once; OCR
   preprocessing performs no additional fixed page rotation
 - both pages are captured completely before processing begins
@@ -111,6 +115,8 @@ The runtime currently behaves as follows:
 - one directory per book under `library/<TAG_ID>/`
 - alternative ISO15693 mappings under
   `library/<ISO14443A_TAG_ID>/iso15693_tag_ids.txt`
+- persistent OCR orientation fallback under
+  `library/<TAG_ID>/state/page_orientation.json`
 - `BookStore`
 - `PageIngestor`
 - `ChapterAssembler` for 10-to-20-page sections with mid-page boundaries
@@ -122,7 +128,9 @@ The runtime currently behaves as follows:
 
 ### Text cases handled explicitly
 
-- a missing page number on only one side of an otherwise complete double-page report
+- a missing page number on only one side of an otherwise complete double-page
+  report; provisional `page_1.json`/`page_2.json` files are replaced with the
+  inferred four-digit filenames after the second page is available
 - multiple chapter markers on one page
 - heading-only pages such as `INTERMEZZO`
 - incomplete sentence fragments across pages

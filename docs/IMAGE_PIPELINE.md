@@ -1,6 +1,6 @@
 # Image Pipeline
 
-Last reviewed: `2026-07-04`
+Last reviewed: `2026-08-19`
 
 Deutsche Fassung: [Bildpipeline](../docs_DE/IMAGE_PIPELINE.md)
 
@@ -26,7 +26,10 @@ Important context:
 - it captures both pages first and then processes the left page before the
   right page
 - in this path, `capture_double_page.py` runs with `--skip-enhance`
-- the runtime then prepares the OCR image separately for each page
+- before per-page preparation, the runtime prepares the raw left case image
+  in memory and classifies three detected text lines as `0` or `180` degrees
+- it applies the resulting shared page assignment once, then prepares the OCR
+  image separately for each page
 
 ## Manual Reference Path on the Pi
 
@@ -35,24 +38,29 @@ The manual reference path on the Pi remains:
 1. `python hardware/capture_double_page.py --no-denoise`
 2. `python hardware/run_rapidocr.py --ocr-dir captures/latest/ocr --output-dir runs/latest_rapidocr --orientation-mode off --overlay`
 
-Rationale:
+Rationale for this isolated manual path:
 
 - compared with the previous preprocessing path, `--no-denoise` saves
   approximately `12-13s` per spread
 - the lightweight RapidOCR wrapper writes `left.txt` early and then writes
   `right.txt`
-- additional orientation detection is currently too expensive and is
-  therefore not enabled by default
+- the wrapper's older full per-page orientation comparison is too expensive
+  and is therefore not enabled by default
+
+The production front-panel path is different: it uses the fast three-line
+RapidOCR angle classifier once per spread before normal OCR. It stores a
+reliable result per book and falls back to that marker on text-poor pages.
 
 Measured Raspberry Pi performance on `2026-07-01`:
 
 - `capture_double_page`, including rectification and OCR preprocessing:
   approximately `10.9s`
 - OCR preprocessing with `--no-denoise` within that run: approximately `2.8s`
-- lightweight RapidOCR run with simple orientation detection: approximately
+- lightweight RapidOCR wrapper with its older simple orientation comparison:
+  approximately
   `24.2s`
-- for further performance work, the current recommendation is to use
-  `--orientation-mode off` and revisit orientation detection separately
+- for this wrapper, the recommendation remains `--orientation-mode off`;
+  production orientation is handled by the separate shared three-line probe
 
 ## 1. `capture_double_page`
 
@@ -238,8 +246,11 @@ Important decision:
 
 - `--orientation-mode simple` remains available as an experimental option
 - the currently preferred default is **`--orientation-mode off`**
-- orientation detection presently adds several seconds per page and will be
-  improved separately later
+- this legacy comparison adds several seconds per page and is not used by the
+  production runtime
+
+These options control the wrapper's older per-page 0/180 comparison. They do
+not disable the production runtime's shared three-line orientation probe.
 
 ## 4. `run_fallback_pipeline.py`
 

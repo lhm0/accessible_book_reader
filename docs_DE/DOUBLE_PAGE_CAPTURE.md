@@ -1,6 +1,6 @@
 # Double Page Capture
 
-Stand: `2026-07-01`
+Stand: `2026-08-19`
 
 ## Zweck
 
@@ -35,12 +35,19 @@ Wichtig fuer den produktiven Frontpanel-Pfad:
 - `capture_double_page.py` nimmt zunaechst mit der normalen Zuordnung
   Kamera 0 nach `case/left.jpg` und Kamera 1 nach `case/right.jpg` auf
 - nach den Aufnahmen holt die Runtime das Ergebnis der zuvor gestarteten
-  PN5180-Abfrage ab
-- bei Orientierung 1 bleiben die beiden `case`-Dateien zugeordnet
-- bei Orientierung 2 werden `case/left.jpg` und `case/right.jpg` vertauscht
+  PN5180-Abfrage zur Buchidentifikation ab; die Readerposition wird nicht fuer
+  die Seitenorientierung verwendet
+- die Runtime bereitet `case/left.jpg` im Speicher vor, sucht drei lange
+  Textzeilen und entscheidet mit dem RapidOCR-Winkelklassifikator zwischen
+  aufrecht und kopfstehend
+- bei aufrechtem Text bleiben die beiden `case`-Dateien zugeordnet; bei
+  kopfstehendem Text werden `case/left.jpg` und `case/right.jpg` vertauscht
 - anschliessend dreht die Runtime `case/right.jpg` einmalig um `180` Grad
 - die gemeinsame OCR-Vorverarbeitung dreht im NFC-Runtime-Pfad danach keine
   Seite erneut
+- zuverlaessige Ergebnisse aktualisieren den buchweisen Merker; bei leeren,
+  textarmen oder uneindeutigen Seiten wird die zuletzt gespeicherte
+  Orientierung verwendet
 
 ## Dateien
 
@@ -234,7 +241,7 @@ bevor `case/right.jpg` geschrieben wird.
 
 Dieser manuelle Parameter ist fuer isolierte Capture-/Rectify-Tests gedacht.
 Im produktiven Frontpanel-Pfad wird die rechte Seitendatei nach der
-NFC-basierten Zuordnung automatisch gedreht.
+OCR-basierten Zuordnung automatisch gedreht.
 
 ## Aktueller Folgeaufruf
 
@@ -250,13 +257,18 @@ python hardware/run_rapidocr.py \
   --overlay
 ```
 
-Wichtig:
+Wichtig fuer diesen isolierten Wrapper-Aufruf:
 
 - die zusaetzliche Orientierungserkennung bleibt als Option im Wrapper
   vorhanden
 - sie ist aktuell aber **nicht** Teil des bevorzugten Standardpfads
 - Grund: sie kostet derzeit mehrere Sekunden pro Seite und soll spaeter separat
   erneut optimiert werden
+
+Dies beschreibt nicht die Orientierungssonde des produktiven
+Frontpanel-Pfads. Die Runtime klassifiziert einmalig drei Textzeilen vor der
+Vorbereitung und Erkennung beider Seiten; dadurch wird keine komplette Seite
+doppelt per OCR verarbeitet.
 
 ## Wichtige Optionen
 

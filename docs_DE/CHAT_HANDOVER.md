@@ -1,6 +1,6 @@
 # Chat Handover
 
-Stand: `2026-08-17`
+Stand: `2026-08-19`
 
 ## Zweck
 
@@ -21,11 +21,13 @@ Der aktuelle produktionsnahe Pfad auf dem Raspberry Pi 5 ist:
    `Kapitel-/Letzte-Seiten-Zusammenfassung` und `EC11`
 2. NFC-Tag-Lesen ueber das `PN5180`-Gateway
 3. reale Doppelaufnahme mit getrennter Beleuchtung links/rechts
-4. beide Seiten erst komplett aufnehmen, dann links vor rechts verarbeiten
-5. fuer links zuerst: Bildvorbereitung, OCR, `PageIngestor`, TTS
-6. fuer rechts danach dieselben Schritte waehrend die linke Seite bereits
+4. Buch ueber NFC zuordnen und Orientierung schnell aus drei RapidOCR-
+   Textzeilen der linken Aufnahme bestimmen
+5. beide Seiten korrekt zuordnen, dann links vor rechts verarbeiten
+6. fuer links zuerst: Bildvorbereitung, OCR, `PageIngestor`, TTS
+7. fuer rechts danach dieselben Schritte waehrend die linke Seite bereits
    abgespielt wird
-7. automatische Seitenausgabe per TTS
+8. automatische Seitenausgabe per TTS
 
 Die Runtime dafuer ist inklusive Abschnitts- und Summary-Ebene implementiert.
 Neu hinzugekommen sind:
@@ -51,6 +53,12 @@ Neu hinzugekommen sind:
 - bestehende `book.json` ohne Sprache gelten als Deutsch; englische Testbuecher
   aus der Zeit vor Etappe 5 muessen kontrolliert migriert oder neu angelegt
   werden
+- die Readerposition bestimmt die Seitenorientierung nicht mehr: RapidOCR
+  klassifiziert drei lange Textzeilen vor der eigentlichen OCR; zuverlaessige
+  Ergebnisse aktualisieren `state/page_orientation.json`, textarme Seiten
+  verwenden den buchweisen Merker
+- neue Buecher koennen ohne ISO14443A direkt mit genau einem unbekannten
+  ISO15693-Tag angelegt werden
 - die [deutsche README](../readme_DE.md) dokumentiert den bisherigen Stand;
   die englische [README](../readme.md) ist der kanonische Einstieg fuer eine
   Neuinstallation; sie fuehrt von Systempaketen und Checkout ueber `.venv`,
@@ -143,12 +151,15 @@ Die beiden Summary-Tasten sind jetzt fachlich verdrahtet:
     Zielgroesse oder aktive Buchsprache geaendert hat
   - wandelt sie per TTS in Audio und spielt sie ab
 
-Beim inkrementellen Ingest wird die linke Seite bereits nach `left_report.json`
-gespeichert. Falls ihre Seitenzahl erst durch die rechte Seite im kombinierten
-`report.json` ermittelt werden kann, ersetzt der Ingest jetzt den unnummerierten
-Platzhalter (zum Beispiel `page_1.json`) durch die nummerierte Datei. Die
-Zuordnung wird ueber Scan-ID, Seitenseite und urspruengliche Report-Seiten-ID
-abgesichert; geloescht wird erst nach erfolgreichem Speichern des Ersatzes.
+Beim inkrementellen Ingest wird die erste Seite bereits nach
+`left_report.json` gespeichert. Falls ihre Seitenzahl erst durch die zweite
+Seite im kombinierten `report.json` ermittelt werden kann, leitet der Ingest
+die Nachbarzahl aus der erkannten Links-/Rechts-Lage ab: zweite Seite rechts
+bedeutet Vorgänger, zweite Seite links bedeutet Nachfolger. Die Platzhalter
+`page_1.json`/`page_2.json` werden durch vierstellig nummerierte Dateien
+ersetzt. Die Zuordnung wird ueber Scan-ID, Seitenseite und urspruengliche
+Report-Seiten-ID abgesichert; geloescht wird erst nach erfolgreichem Speichern
+des Ersatzes.
 
 Unnummerierte Kapitelueberschriften sind fuer die Audioausgabe jetzt ebenfalls
 abgesichert. Der produktive schlanke RapidOCR-Pfad schreibt dazu ebenso wie die
@@ -429,35 +440,36 @@ Produktiv in den Start-Knopf integriert ist inzwischen:
 
 1. beim Tastendruck sofort `STATUS_START`
 2. Aufnahme beider Kamerabilder waehrend der Gateway-Job laeuft
-3. danach `STATUS_FETCH`, unmittelbar vor Bildzuordnung und OCR
-4. ISO14443A als fuehrende Buch-ID
+3. danach `STATUS_FETCH`, unmittelbar vor Buchzuordnung und OCR
+4. ISO14443A als bevorzugte Buch-ID
 5. Speicherung gleichzeitig gelesener ISO15693-IDs unter
    `library/<ISO14443A_ID>/iso15693_tag_ids.txt`
 6. bei ausschliesslich gelesenem ISO15693-Tag Suche dieser Alias-ID in den
-   vorhandenen Buchordnern
+   vorhandenen Buchordnern; genau ein unbekannter ISO15693-Tag legt ein neues
+   Buch direkt unter dieser ID an
 
-Am realen Scanner verifizierte Bildzuordnung:
+Am realen Scanner verifizierte OCR-Bildzuordnung:
 
-- ISO14443A auf Reader 2 = Orientierung 1
-  - `case/left.jpg` und `case/right.jpg` bleiben zugeordnet
-- ISO14443A auf Reader 1 = Orientierung 2
-  - `case/left.jpg` und `case/right.jpg` werden direkt nach `STATUS_FETCH`
-    vertauscht
+- die Readerposition dient ausschliesslich der Tag-Erfassung und beeinflusst
+  die Orientierung nicht mehr
+- die vorbereitete linke Aufnahme liefert drei lange, vertikal getrennte
+  Textzeilen fuer den RapidOCR-Winkelklassifikator
+- Votum `0` = `case/left.jpg` und `case/right.jpg` bleiben zugeordnet
+- Votum `180` = beide Dateien werden vor der normalen OCR vertauscht
 - nach dieser Zuordnung wird `case/right.jpg` einmalig um `180` Grad gedreht
 - die nachfolgende OCR-Vorverarbeitung verwendet fuer beide Seiten
   `0` Grad Zusatzdrehung
 - dadurch zeigen Camera-Testserver und OCR denselben korrigierten
   `case`-Stand
-
-Die bei ausschliesslicher ISO15693-Zuordnung verwendete Orientierung ist
-leicht umstellbar:
-
-```bash
---iso15693-only-orientation reader1
---iso15693-only-orientation reader2
-```
-
-Standard ist `reader2`, also Orientierung 1.
+- mindestens zwei Klassifikationen muessen Konfidenz `>= 0.55` erreichen; der
+  gewichtete Vorsprung muss groesser als `0.35` sein
+- jede zuverlaessige Erkennung aktualisiert
+  `library/<TAG_ID>/state/page_orientation.json`
+- fehlen drei Zeilen, zwei zuverlaessige Klassifikationen oder ein eindeutiger
+  Vorsprung, wird der gespeicherte Merker verwendet; neue Buchordner starten
+  mit `reader2`, sodass auch eine leere erste Seite nicht abbricht
+- nur fachlich nicht bestimmbare Orientierung nutzt den Fallback; technische
+  OCR-Fehler bleiben sichtbar
 
 Wichtig fuer `TYPEA_SWEEP`:
 
@@ -1034,6 +1046,8 @@ Aktueller Sonderfall:
 
 - [hardware/control_panel_service.py](../hardware/control_panel_service.py)
 - [abr/control/runtime.py](../abr/control/runtime.py)
+- [abr/capture_ocr.py](../abr/capture_ocr.py)
+- [abr/ocr/rapidocr_backend.py](../abr/ocr/rapidocr_backend.py)
 - [abr/book/store.py](../abr/book/store.py)
 - [abr/book/page_ingestor.py](../abr/book/page_ingestor.py)
 - [abr/book/models.py](../abr/book/models.py)

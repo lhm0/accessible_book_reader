@@ -1,6 +1,6 @@
 # Book Runtime and Data Architecture
 
-Last reviewed: `2026-08-18`
+Last reviewed: `2026-08-19`
 
 Deutsche Fassung: [Laufzeit- und Datenarchitektur für Bücher](../docs_DE/BOOK_RUNTIME_DATA_ARCHITECTURE.md)
 
@@ -24,8 +24,10 @@ The runtime separates volatile state—inputs, active jobs, and audio—from
 persistent book state. All persistent data for a book resides below
 `library/<tag_id>/`.
 
-The primary ISO14443A NFC tag is the book's primary key. Additional ISO15693
-IDs may be associated with the same book as aliases. A book is also
+An ISO14443A NFC tag is preferred as the book key. Additional ISO15693 IDs may
+be associated with the same book as aliases. If a scan contains exactly one
+unknown ISO15693 tag and no ISO14443A tag, that ISO15693 ID becomes the key of
+a newly created book. A book is also
 permanently bound to the active `de` or `en` language profile when it is first
 ingested. Legacy `book.json` files without a `language` field are treated as
 German and are updated on the next German access. Mixed-language book, OCR,
@@ -40,6 +42,7 @@ library/
     iso15693_tag_ids.txt
     state/
       chapter_assembler_state.json
+      page_orientation.json
       pending_right_tail_fragment.json
     scans/
       <scan_id>/
@@ -58,10 +61,16 @@ library/
 ```
 
 - Pages with a detected page number use a zero-padded four-digit filename.
-  Otherwise, the sanitized `page_id` is used.
+  Otherwise, the sanitized `page_id` is used provisionally. Once the second
+  side supplies a page number, the opposite number is inferred from its
+  left/right side and both placeholders are replaced by numbered files.
 - `iso15693_tag_ids.txt` contains one alias per line. If only a known
   ISO15693 tag is detected, new data continues to be stored in the associated
   ISO14443A book directory.
+- `state/page_orientation.json` stores the last reliable OCR-based page
+  orientation (`reader1` for the swapped assignment or `reader2` for the
+  unchanged assignment). It is initialized to `reader2` for a new book and is
+  used when an empty or text-poor page cannot be classified reliably.
 - JSON and text files are replaced atomically through a temporary file.
 
 ## Persistent data objects

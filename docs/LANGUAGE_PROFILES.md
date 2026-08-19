@@ -1,6 +1,6 @@
 # German and U.S. English Book Languages
 
-Last reviewed: `2026-08-07` — stages 1 through 5 and multilingual system
+Last reviewed: `2026-08-19` — stages 1 through 5 and multilingual system
 prompts implemented
 
 Deutsche Fassung: [Buchsprachen Deutsch und U.S.-Englisch](../docs_DE/LANGUAGE_PROFILES.md)
@@ -73,7 +73,8 @@ The OCR language code is carried through the complete path:
 - `CaptureOCRJobConfig.language`
 - `hardware/run_rapidocr.py --language de|en`
 - regular and incremental runtime paths
-- orientation testing and final page recognition
+- the production three-line angle classification, optional wrapper
+  orientation testing, and final page recognition
 - `ocr_language` in `report.json` and `ScanRecord` metadata
 - language and model profile in each RapidOCR line's metadata
 

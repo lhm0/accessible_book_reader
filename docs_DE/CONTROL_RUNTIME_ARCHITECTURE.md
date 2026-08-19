@@ -1,6 +1,6 @@
 # Control Runtime Architecture
 
-Stand: `2026-07-11`
+Stand: `2026-08-19`
 
 ## Ziel
 
@@ -333,30 +333,42 @@ behalten ihre bisherigen Labels.
 - [abr/book/page_ingestor.py](../abr/book/page_ingestor.py)
 - [hardware/control_panel_service.py](../hardware/control_panel_service.py)
 
-## Asynchrone NFC-Abfrage und Buchorientierung
+## Asynchrone NFC-Abfrage und OCR-Seitenorientierung
 
 Der Startpfad verwendet fuer das PN5180-Gateway den zweistufigen Ablauf:
 
 1. direkt beim Druecken von `Start / Stop / NFC`: `STATUS_START`
 2. Aufnahme beider Kamerabilder
-3. unmittelbar vor Bildvorbereitung/OCR: `STATUS_FETCH`
+3. unmittelbar vor Bildvorbereitung/OCR: `STATUS_FETCH` fuer die
+   Buchzuordnung
+4. linkes Aufnahmebild im Speicher vorbereiten und seine 0-/180-Grad-
+   Orientierung ueber Textzeilen bestimmen
 
 Die Auswahl danach ist:
 
-- `ISO14443A` ist der fuehrende Buchschluessel
-- Reader 2 mit ISO14443A wird als Orientierung 1 gemeldet
-- Reader 1 mit ISO14443A wird als Orientierung 2 gemeldet
-- bei Orientierung 1 bleibt die aufgenommene Links-/Rechts-Zuordnung erhalten
-- bei Orientierung 2 werden die beiden Seitendateien unmittelbar nach
-  `STATUS_FETCH` und vor der Bildvorbereitung vertauscht
+- `ISO14443A` ist der bevorzugte Buchschluessel. Wird ohne ISO14443A genau ein
+  bisher unbekannter `ISO15693`-Tag gelesen, legt dessen ID das neue Buch an;
+  bekannte ISO15693-Aliase fuehren weiter zum vorhandenen Buch.
+- NFC identifiziert nur das Buch. In welchem Reader der Tag erscheint,
+  bestimmt die Seitenorientierung nicht mehr.
+- Die RapidOCR-Detektion waehlt ohne Texterkennung drei lange, vertikal
+  getrennte Textzeilen. Der Winkelklassifikator stimmt gewichtet ueber `0`
+  oder `180` ab; erforderlich sind mindestens zwei Klassifikationen mit
+  Konfidenz `>= 0.55` und ein Stimmenvorsprung groesser als `0.35`.
+- Bei aufrechtem Text bleibt die Links-/Rechts-Zuordnung erhalten. Bei
+  kopfstehendem Text werden die Seitendateien vor der normalen
+  OCR-Vorbereitung vertauscht.
 - danach wird `case/right.jpg` direkt um 180 Grad gedreht; dadurch ist die
   Korrektur auch im Camera-Testserver unter `entzerrte Bilder` sichtbar
 - die OCR-Vorverarbeitung fuehrt keine weitere Seitendrehung aus
-- nur ISO15693: Zuordnung ueber vorhandene
-  `iso15693_tag_ids.txt`; Standardorientierung wie Reader 2
-
-Die ISO15693-Only-Orientierung ist mit
-`--iso15693-only-orientation reader1|reader2` umstellbar.
+- Eine zuverlaessige OCR-Erkennung wird unter
+  `library/<TAG_ID>/state/page_orientation.json` gespeichert. Fehlen drei
+  brauchbare Zeilen, erreichen weniger als zwei Klassifikationen die
+  Mindestkonfidenz oder ist das Votum uneindeutig, verwendet die Runtime den
+  gespeicherten Wert des Buchs.
+- Der Merker wird beim Anlegen des Buchordners mit `reader2` initialisiert.
+  Daher bricht auch eine leere erste Buchseite den Capture-/OCR-Lauf nicht ab.
+  Technische OCR-Fehler werden durch diesen Fallback weiterhin nicht verdeckt.
 
 ## Gekapselter Neural2-Testpfad
 

@@ -1,6 +1,6 @@
 # Image Pipeline
 
-Stand: `2026-07-04`
+Stand: `2026-08-19`
 
 ## Ziel
 
@@ -23,7 +23,11 @@ Wichtig zur Einordnung:
 - dort werden beide Seiten zuerst aufgenommen und danach links vor rechts
   verarbeitet
 - `capture_double_page.py` laeuft in diesem Pfad mit `--skip-enhance`
-- die OCR-Bildvorbereitung passiert danach einzeln pro Seite in der Runtime
+- vor der seitenweisen Vorbereitung bereitet die Runtime das linke rohe
+  `case`-Bild im Speicher vor und klassifiziert drei erkannte Textzeilen als
+  `0` oder `180` Grad
+- die daraus folgende gemeinsame Seitenzuordnung wird genau einmal
+  angewendet; danach passiert die OCR-Bildvorbereitung einzeln pro Seite
 
 ## Manueller Referenzpfad auf dem Pi
 
@@ -32,24 +36,30 @@ Der weiterhin wichtige manuelle Referenzpfad auf dem Pi ist:
 1. `python hardware/capture_double_page.py --no-denoise`
 2. `python hardware/run_rapidocr.py --ocr-dir captures/latest/ocr --output-dir runs/latest_rapidocr --orientation-mode off --overlay`
 
-Begruendung:
+Begruendung fuer diesen isolierten manuellen Pfad:
 
 - `--no-denoise` spart gegenueber dem frueheren Vorverarbeitungspfad grob
   `12-13s` pro Doppelseite
 - der schlanke RapidOCR-Wrapper schreibt frueh `left.txt` und danach `right.txt`
-- die zusaetzliche Orientierungserkennung ist im Moment noch zu teuer und wird
-  deshalb vorerst nicht als Standard verwendet
+- der aeltere vollstaendige Orientierungvergleich des Wrappers ist zu teuer
+  und wird deshalb nicht als Standard verwendet
+
+Der produktive Frontpanel-Pfad arbeitet anders: Er verwendet einmal pro
+Doppelseite den schnellen RapidOCR-Winkelklassifikator auf drei Textzeilen vor
+der normalen OCR. Ein zuverlaessiges Ergebnis wird buchweise gespeichert; bei
+textarmen Seiten greift die Runtime auf diesen Merker zurueck.
 
 Gemessener Pi-Stand vom `2026-07-01`:
 
 - `capture_double_page` inklusive Entzerrung und OCR-Vorverarbeitung:
   ca. `10.9s`
 - darin OCR-Vorverarbeitung mit `--no-denoise`: ca. `2.8s`
-- schlanker RapidOCR-Lauf mit einfacher Orientierungserkennung:
+- schlanker RapidOCR-Wrapper mit seinem aelteren einfachen
+  Orientierungsvergleich:
   ca. `24.2s`
-- fuer weitere Zeitoptimierung wird aktuell empfohlen, den Wrapper mit
-  `--orientation-mode off` zu fahren und das Thema Orientierung spaeter
-  gesondert wieder aufzugreifen
+- fuer diesen Wrapper bleibt `--orientation-mode off` empfohlen; die
+  produktive Orientierung uebernimmt die getrennte gemeinsame
+  Drei-Zeilen-Sonde
 
 ## 1. capture_double_page
 
@@ -233,8 +243,12 @@ Wichtige Entscheidung:
 
 - `--orientation-mode simple` bleibt als experimentelle Option im Code
 - der aktuelle bevorzugte Standard ist **`--orientation-mode off`**
-- Grund: Orientierung kostet derzeit mehrere Sekunden pro Seite und soll spaeter
-  noch einmal gezielt verbessert werden
+- dieser Altpfad kostet mehrere Sekunden pro Seite und wird von der
+  produktiven Runtime nicht verwendet
+
+Diese Optionen steuern den aelteren seitenweisen 0-/180-Vergleich des
+Wrappers. Sie deaktivieren nicht die gemeinsame Drei-Zeilen-
+Orientierungssonde der produktiven Runtime.
 
 ## 4. run_fallback_pipeline.py
 

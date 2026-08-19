@@ -1,6 +1,6 @@
 # Double-Page Capture
 
-Last reviewed: `2026-07-01`
+Last reviewed: `2026-08-19`
 
 Deutsche Fassung: [Doppelseitenaufnahme](../docs_DE/DOUBLE_PAGE_CAPTURE.md)
 
@@ -41,12 +41,18 @@ Important behavior of the production front-panel path:
 - `capture_double_page.py` initially captures camera 0 as `case/left.jpg` and
   camera 1 as `case/right.jpg` using the normal assignment.
 - After capture, the runtime fetches the result of the previously started
-  PN5180 query.
-- With orientation 1, the two `case` files keep their assignment.
-- With orientation 2, `case/left.jpg` and `case/right.jpg` are swapped.
+  PN5180 query to identify the book. Reader position is not used for page
+  orientation.
+- The runtime prepares `case/left.jpg` in memory, detects three long text
+  lines, and uses RapidOCR's angle classifier to decide between upright and
+  upside down.
+- Upright text keeps the two `case` files assigned; upside-down text swaps
+  `case/left.jpg` and `case/right.jpg`.
 - The runtime then rotates `case/right.jpg` once by `180` degrees.
 - In the NFC runtime path, shared OCR preprocessing does not rotate either
   page again.
+- Reliable orientation results update the per-book marker. If the page is
+  empty, text-poor, or ambiguous, the last stored orientation is used.
 
 ## Files
 
@@ -239,7 +245,7 @@ before writing `case/right.jpg`.
 
 This manual parameter is intended for isolated capture and rectification
 tests. In the production front-panel path, the right page is rotated
-automatically after NFC-based assignment.
+automatically after OCR-based assignment.
 
 ## Current Follow-Up Command
 
@@ -255,12 +261,16 @@ python hardware/run_rapidocr.py \
   --overlay
 ```
 
-Important:
+Important for this isolated wrapper command:
 
 - the wrapper still provides optional additional orientation detection
 - it is currently **not** part of the preferred standard path
 - it presently costs several seconds per page and is intended for separate
   optimization later
+
+This does not describe the production front-panel orientation probe. The
+runtime performs one fast, shared three-line classification before preparing
+and recognizing the pages, so it does not OCR each complete page twice.
 
 ## Important Options
 

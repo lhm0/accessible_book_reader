@@ -1,6 +1,6 @@
 # Buchsprachen Deutsch und U.S.-Englisch
 
-Stand: `2026-08-07` – Etappen 1 bis 5 und mehrsprachige Systemhinweise implementiert
+Stand: `2026-08-19` – Etappen 1 bis 5 und mehrsprachige Systemhinweise implementiert
 
 ## Ziel
 
@@ -72,7 +72,8 @@ Der OCR-Sprachcode wird jetzt durchgaengig transportiert:
 - `CaptureOCRJobConfig.language`
 - `hardware/run_rapidocr.py --language de|en`
 - normaler und inkrementeller Runtime-Pfad
-- Orientierungstest und finale Seitenerkennung
+- produktive Drei-Zeilen-Winkelklassifikation, optionaler Wrapper-
+  Orientierungstest und finale Seitenerkennung
 - `ocr_language` in `report.json` und den `ScanRecord`-Metadaten
 - Sprache und Modellprofil in den Metadaten jeder RapidOCR-Zeile
 

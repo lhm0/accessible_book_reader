@@ -1,6 +1,6 @@
 # Laufzeit- und Datenarchitektur für Bücher
 
-Stand: `2026-08-18`
+Stand: `2026-08-19`
 
 English version: [Book Runtime and Data Architecture](../docs/BOOK_RUNTIME_DATA_ARCHITECTURE.md)
 
@@ -25,8 +25,10 @@ Die Runtime trennt flüchtigen Laufzeitstatus (Eingaben, laufende Jobs und
 Audio) von dauerhaftem Buchstatus. Alle dauerhaften Daten eines Buches liegen
 unter `library/<tag_id>/`.
 
-Der führende ISO14443A-NFC-Tag ist der Primärschlüssel. Zusätzliche
-ISO15693-IDs können demselben Buch als Aliase zugeordnet werden. Ein Buch wird
+Ein ISO14443A-NFC-Tag wird als Buchschluessel bevorzugt. Zusätzliche
+ISO15693-IDs können demselben Buch als Aliase zugeordnet werden. Enthaelt ein
+Scan ohne ISO14443A genau einen unbekannten ISO15693-Tag, wird dessen ID zum
+Schluessel eines neu angelegten Buchs. Ein Buch wird
 außerdem dauerhaft an das beim ersten Einlesen aktive Sprachprofil `de` oder
 `en` gebunden. Alte `book.json`-Dateien ohne `language` gelten als deutsch und
 werden beim nächsten deutschen Zugriff entsprechend ergänzt. Gemischte
@@ -41,6 +43,7 @@ library/
     iso15693_tag_ids.txt
     state/
       chapter_assembler_state.json
+      page_orientation.json
       pending_right_tail_fragment.json
     scans/
       <scan_id>/
@@ -59,10 +62,17 @@ library/
 ```
 
 - Seiten mit erkannter Seitenzahl erhalten einen vierstellig aufgefüllten
-  Dateinamen. Ohne Seitenzahl wird die bereinigte `page_id` verwendet.
+  Dateinamen. Ohne Seitenzahl wird die bereinigte `page_id` vorlaeufig
+  verwendet. Liefert die zweite Seite eine Zahl, wird die Gegenseite anhand
+  ihrer Links-/Rechts-Lage abgeleitet und beide Platzhalter werden durch
+  nummerierte Dateien ersetzt.
 - `iso15693_tag_ids.txt` enthält eine Alias-ID pro Zeile. Wird nur ein
   bekannter ISO15693-Tag gelesen, werden neue Daten weiter im zugehörigen
   ISO14443A-Buchordner gespeichert.
+- `state/page_orientation.json` speichert die letzte zuverlaessige OCR-
+  Seitenorientierung (`reader1` fuer vertauschte oder `reader2` fuer
+  unveraenderte Zuordnung). Bei einem neuen Buch wird `reader2` initialisiert;
+  bei leeren oder textarmen Seiten dient der Wert als Fallback.
 - JSON- und Textdateien werden atomar über eine temporäre Datei ersetzt.
 
 ## Persistente Datenobjekte

@@ -84,15 +84,19 @@ Im Runtime-Pfad gilt aktuell:
 
 - beim Start wird die PN5180-Abfrage sofort per `STATUS_START` angestossen
 - die beiden Fotos werden aufgenommen, bevor das Ergebnis per `STATUS_FETCH`
-  fuer Buchzuordnung und Orientierung abgeholt wird
-- `ISO14443A` ist der fuehrende Buchschluessel; ein gleichzeitig gelesener
-  `ISO15693`-Tag wird im Buchordner als alternative Zuordnung gespeichert
-- Reader 2 kennzeichnet Orientierung 1: die beim Capture erzeugte
-  Links-/Rechts-Zuordnung bleibt bestehen
-- Reader 1 kennzeichnet Orientierung 2: `case/left.jpg` und
-  `case/right.jpg` werden direkt nach `STATUS_FETCH` vertauscht
-- danach wird `case/right.jpg` einmalig um `180` Grad gedreht; in der
-  OCR-Vorverarbeitung erfolgt keine weitere feste Seitendrehung
+  fuer die Buchzuordnung abgeholt wird; die Readerposition bestimmt die
+  Seitenorientierung nicht mehr
+- `ISO14443A` bleibt der bevorzugte Buchschluessel; ein gleichzeitig gelesener
+  `ISO15693`-Tag wird als Alias gespeichert, ein neues Buch kann aber auch
+  direkt mit genau einem `ISO15693`-Tag angelegt werden
+- vor der eigentlichen Seiten-OCR sucht RapidOCR im vorbereiteten linken Bild
+  drei lange Textzeilen und klassifiziert sie als aufrecht oder kopfstehend
+- bei kopfstehendem Text werden `case/left.jpg` und `case/right.jpg`
+  vertauscht; die danach rechte Seitendatei wird genau einmal um `180` Grad
+  gedreht
+- jede zuverlaessige Erkennung aktualisiert
+  `library/<TAG_ID>/state/page_orientation.json`; textarme oder leere Seiten
+  verwenden diesen Merker und fuehren nicht zum Abbruch
 - beide Seiten werden zuerst komplett aufgenommen
 - danach wird links vor rechts verarbeitet
 - Bildvorbereitung, OCR, `PageIngestor` und TTS starten zunaechst nur fuer die
@@ -120,6 +124,8 @@ Im Runtime-Pfad gilt aktuell:
 - Speicherung pro Buch unter `library/<TAG_ID>/`
 - alternative ISO15693-Zuordnungen unter
   `library/<ISO14443A_TAG_ID>/iso15693_tag_ids.txt`
+- persistenter OCR-Orientierungsfallback unter
+  `library/<TAG_ID>/state/page_orientation.json`
 - `BookStore`
 - `PageIngestor`
 - `ChapterAssembler` fuer 10-20 Seiten lange Abschnitte mit Mid-Page-Grenzen
@@ -132,7 +138,8 @@ Im Runtime-Pfad gilt aktuell:
 ### Bereits sauber behandelte Textfaelle
 
 - fehlende Seitenzahl auf nur einer Seite eines vollstaendigen Doppelseiten-
-  Reports
+  Reports; vorlaeufige Dateien `page_1.json`/`page_2.json` werden nach der
+  zweiten Seite durch die abgeleiteten vierstelligen Dateinamen ersetzt
 - mehrere Kapitelmarker auf einer Seite
 - reine Ueberschriftenseiten wie `INTERMEZZO`
 - unvollstaendige Satzreste ueber Seiten hinweg

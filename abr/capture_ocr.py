@@ -419,19 +419,41 @@ def detect_page_orientation_from_text_lines(
     vote_0 = sum(confidence for label, confidence in accepted if label == "0")
     vote_180 = sum(confidence for label, confidence in accepted if label == "180")
     if vote_180 > vote_0 + ORIENTATION_VOTE_MARGIN:
-        rotation_deg = 180
+        classifier_rotation_deg = 180
     elif vote_0 > vote_180 + ORIENTATION_VOTE_MARGIN:
-        rotation_deg = 0
+        classifier_rotation_deg = 0
     else:
         raise OrientationDetectionError(
             "OCR-Orientierung nicht eindeutig: "
             f"votes=0:{vote_0:.3f},180:{vote_180:.3f}, "
             f"erforderlicher Vorsprung={ORIENTATION_VOTE_MARGIN:.3f}."
         )
+
+    rotation_deg = classifier_rotation_deg
+    verification_reason = "recognition-verification=unavailable"
+    verification_timings: dict[str, float] = {}
+    if callable(getattr(ocr_backend, "recognize", None)):
+        verification = _detect_orientation_simple(image, ocr_backend, language=language)
+        verification_timings = {
+            f"orientation_verification_{key}": value
+            for key, value in verification["timings"].items()
+        }
+        score_delta = float(verification["score_delta"])
+        if abs(score_delta) > ORIENTATION_SCORE_EPSILON:
+            rotation_deg = int(verification["rotation_deg"])
+            decision = "recognition"
+        else:
+            decision = "classifier"
+        verification_reason = (
+            f"recognition-verification ocr0={float(verification['score_0']):.3f},"
+            f"ocr180={float(verification['score_180']):.3f},delta={score_delta:.3f},"
+            f"epsilon={ORIENTATION_SCORE_EPSILON:.3f},decision={decision}"
+        )
     reason = (
         f"textline-classifier boxes={line_boxes}, results={classifications}, "
         f"accepted={len(accepted)}/{len(classifications)}, votes=0:{vote_0:.3f},"
-        f"180:{vote_180:.3f}, margin={ORIENTATION_VOTE_MARGIN:.3f}"
+        f"180:{vote_180:.3f}, margin={ORIENTATION_VOTE_MARGIN:.3f}; "
+        f"{verification_reason}"
     )
     return {
         "rotation_deg": rotation_deg,
@@ -442,6 +464,7 @@ def detect_page_orientation_from_text_lines(
             "orientation_line_selection_sec": selection_sec,
             "orientation_classifier_sec": classifier_sec,
             "orientation_sec": selection_sec + classifier_sec,
+            **verification_timings,
         },
     }
 
@@ -492,6 +515,9 @@ def _detect_orientation_simple(
         "rotation_deg": rotation_deg,
         "reason": reason,
         "image": oriented_image,
+        "score_0": score_0,
+        "score_180": score_180,
+        "score_delta": score_delta,
         "timings": timings,
     }
 

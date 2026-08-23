@@ -17,7 +17,15 @@ def _write_test_image(path: Path) -> None:
 def test_textline_orientation_uses_three_lines_and_rotates_on_confident_vote() -> None:
     image = np.full((600, 900, 3), 255, dtype=np.uint8)
     for y in (120, 260, 400):
-        cv2.putText(image, "Eine ausreichend lange Textzeile", (80, y), cv2.FONT_HERSHEY_SIMPLEX, 1.1, (0, 0, 0), 2)
+        cv2.putText(
+            image,
+            "Eine ausreichend lange Textzeile",
+            (80, y),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            1.1,
+            (0, 0, 0),
+            2,
+        )
 
     class FakeBackend:
         def detect_text_line_crops(self, image, *, count: int, language: str):
@@ -57,6 +65,78 @@ def test_textline_orientation_accepts_weighted_real_pi_vote() -> None:
     assert result["rotation_deg"] == 180
     assert "accepted=3/3" in result["reason"]
     assert "votes=0:0.560,180:1.580" in result["reason"]
+
+
+def test_textline_orientation_recognition_verification_corrects_false_classifier_vote() -> None:
+    image = np.full((600, 900, 3), 255, dtype=np.uint8)
+    for y in (120, 260, 400):
+        cv2.putText(
+            image,
+            "Eine ausreichend lange Textzeile",
+            (80, y),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            1.1,
+            (0, 0, 0),
+            2,
+        )
+
+    class FakeBackend:
+        def __init__(self) -> None:
+            self.recognition_calls = 0
+
+        def detect_text_line_crops(self, image, *, count: int, language: str):
+            return [image] * count, [(0, index, 10, 1) for index in range(count)]
+
+        def classify_text_orientation(self, images, language: str = "de"):
+            return [("180", 0.96), ("180", 0.93), ("180", 0.91)]
+
+        def recognize(self, image, language: str = "de"):
+            self.recognition_calls += 1
+            if self.recognition_calls == 1:
+                return [
+                    OCRLine(
+                        text="Eine gut lesbare deutsche Textzeile.",
+                        confidence=0.98,
+                        bbox=((0, 0), (1, 0), (1, 1), (0, 1)),
+                    )
+                ]
+            return [
+                OCRLine(
+                    text="rrr 11",
+                    confidence=0.30,
+                    bbox=((0, 0), (1, 0), (1, 1), (0, 1)),
+                )
+            ]
+
+    result = detect_page_orientation_from_text_lines(image, FakeBackend())
+
+    assert result["rotation_deg"] == 0
+    assert "decision=recognition" in result["reason"]
+
+
+def test_textline_orientation_keeps_classifier_vote_when_recognition_is_ambiguous() -> None:
+    image = np.full((600, 900, 3), 255, dtype=np.uint8)
+
+    class FakeBackend:
+        def detect_text_line_crops(self, image, *, count: int, language: str):
+            return [image] * count, [(0, index, 10, 1) for index in range(count)]
+
+        def classify_text_orientation(self, images, language: str = "de"):
+            return [("180", 0.96), ("180", 0.93), ("180", 0.91)]
+
+        def recognize(self, image, language: str = "de"):
+            return [
+                OCRLine(
+                    text="Gleiche Erkennung.",
+                    confidence=0.90,
+                    bbox=((0, 0), (1, 0), (1, 1), (0, 1)),
+                )
+            ]
+
+    result = detect_page_orientation_from_text_lines(image, FakeBackend())
+
+    assert result["rotation_deg"] == 180
+    assert "decision=classifier" in result["reason"]
 
 
 def test_textline_orientation_rejects_missing_lines_instead_of_guessing_zero() -> None:

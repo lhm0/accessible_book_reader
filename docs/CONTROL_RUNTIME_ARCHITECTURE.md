@@ -339,6 +339,9 @@ The subsequent selection logic is:
   recognizing their text. Its angle classifier votes between `0` and `180`;
   at least two classifications with confidence `>= 0.55` and a weighted vote
   margin greater than `0.35` are required.
+- A text-rich probe is additionally recognized at both `0` and `180` degrees.
+  A clear OCR-quality advantage corrects a confidently wrong classifier vote;
+  an ambiguous comparison leaves the classifier result unchanged.
 - An upright result keeps the captured left/right assignment. An upside-down
   result swaps the two page files before normal OCR preparation.
 - `case/right.jpg` is then rotated by 180 degrees. This makes the correction

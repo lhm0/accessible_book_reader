@@ -615,6 +615,10 @@ Die Seitenausgabe verwendet:
 - Google Cloud TTS als Default
 - Stimme `de-DE-Standard-H`
 - Geschwindigkeit aktuell `0.9`
+- `system_audio/messages/<Sprache>/tatata.wav` als Umblättersignal nach
+  vollstaendig abgespielter rechter Seite
+- kein Umblättersignal bei Stop/Abbruch, TTS- oder Wiedergabefehler sowie nach
+  linker Seite oder Zusammenfassungen
 
 Aktueller Zusatz fuer Kapitelansagen:
 

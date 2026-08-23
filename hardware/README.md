@@ -63,6 +63,8 @@ aktuellen ABR-Scannerstand.
   - verarbeitet danach links vor rechts
   - startet die Seitenausgabe, sobald die linke Seite als Audio vorliegt
   - zieht die rechte Seite waehrend der linken Wiedergabe nach
+  - spielt nach vollstaendig beendeter rechter Seitenausgabe `tatata.wav` als
+    Umblättersignal; Stop, TTS-Fehler und Wiedergabefehler unterdruecken es
   - spielt vor dem Start `bing`
   - spielt waehrend des Wartens einen Heartbeat mit erneutem `bing`
   - beendet den Heartbeat sauber bei Erfolg, Stop oder Fehler

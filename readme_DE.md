@@ -103,6 +103,9 @@ Im Runtime-Pfad gilt aktuell:
   linke Seite
 - waehrend die linke Seite bereits abgespielt wird, folgen Bildvorbereitung,
   OCR, `PageIngestor` und TTS fuer die rechte Seite
+- nach vollstaendig abgespielter rechter Seite signalisiert die
+  sprachabhaengige Datei `tatata.wav`, dass umgeblaettert werden soll; bei
+  Abbruch sowie TTS- oder Wiedergabefehlern bleibt das Signal aus
 
 ## Was Jetzt Implementiert Ist
 
@@ -112,6 +115,8 @@ Im Runtime-Pfad gilt aktuell:
 - `Start / Stop / NFC` fuer echten Lauf `capture -> Bildvorbereitung -> OCR -> page-ingest`
 - Heartbeat-Signal waehrend der Wartezeit bis zur ersten Seitenaudio
 - abbrechbare Seitenausgabe
+- Umblättersignal nur nach erfolgreichem Abschluss der ganzen Doppelseite;
+  bei abgebrochener Seitenausgabe wird es nicht abgespielt
 - Lautstaerkeregelung ueber EC11-Flankeninterrupts mit threadsicherem
   Sollwert; wirkt blockweise auch waehrend `bing.wav` und Seitenaudio
 - Buch-Loeschdialog ueber Dreifachtaste und `EC11`-Taster

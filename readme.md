@@ -93,6 +93,9 @@ The runtime currently behaves as follows:
 - image preparation, OCR, `PageIngestor`, and TTS initially run only for the left page
 - while the left page is already playing, the right page proceeds through
   image preparation, OCR, `PageIngestor`, and TTS
+- after the right page has played completely, the language-specific
+  `tatata.wav` signals that the user should turn the page; cancellation or an
+  audio/TTS error suppresses this signal
 
 ## Implemented features
 
@@ -103,6 +106,8 @@ The runtime currently behaves as follows:
   `capture -> image preparation -> OCR -> page-ingest` path
 - heartbeat while waiting for the first page audio
 - interruptible page playback
+- turn-page signal only after successful completion of the complete spread;
+  it is not played when page audio is cancelled
 - EC11 edge-interrupt volume control with a thread-safe target value; it also
   applies block by block while `bing.wav` or page audio is playing
 - book-deletion dialogue using the three-button chord and the EC11 push button

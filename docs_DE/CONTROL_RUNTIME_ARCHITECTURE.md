@@ -245,6 +245,13 @@ Systemaudio und Signalklaenge laufen ueber einen getrennten Wiedergabepfad
 und werden nicht als Vorlesezeit erfasst. Statistikfehler werden geloggt, aber
 nicht in den eigentlichen Geraeteablauf weitergereicht.
 
+Nach vollstaendig abgespielter rechter Seite einer Doppelseite stellt die
+Runtime `tatata.wav` aus dem aktiven Sprachordner als Umblättersignal in die
+Systemaudio-Queue. Das Signal ist an den erfolgreichen Playback-Completion-
+Callback gebunden, nicht an OCR, TTS-Erzeugung oder das Einplanen der Ausgabe.
+Bei Stop/Abbruch, TTS- oder Wiedergabefehler bleibt es deshalb aus. Nach der
+linken Seite und nach Zusammenfassungen wird es ebenfalls nicht abgespielt.
+
 Die persistente Ablage ist atomar und gegen parallele Zugriffe aus Runtime,
 Audio-Thread und Report-Prozess gesperrt. Perioden folgen `Europe/Berlin` und
 laufen von `04:00` bis `04:00`. Versand, Archivierung und systemd-Betrieb sind

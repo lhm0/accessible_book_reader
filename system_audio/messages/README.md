@@ -6,6 +6,13 @@ Repository-Skript `hardware/generate_audio_message.py`; sein Standard-Backend
 ist Google Cloud TTS. Die Dateien sind keine menschlichen Sprachaufnahmen und
 enthalten keine aus einem fremden Audiowerk uebernommenen Aufnahmen.
 
+Ausnahme ist das sprachneutrale Umblättersignal `tatata.wav` in den beiden
+Sprachordnern. Es wurde separat als MP3 bereitgestellt und als unkomprimiertes
+WAV mit PCM 16 Bit, Mono und 24000 Hz konvertiert; es wurde nicht mit Google
+Cloud TTS erzeugt. Vor einer Weitergabe muss deshalb unabhaengig von diesem
+Google-TTS-Hinweis sichergestellt sein, dass die erforderlichen Rechte an der
+bereitgestellten Ausgangsaufnahme vorliegen.
+
 Google dokumentiert, dass mit Cloud Text-to-Speech erzeugte Audiodateien in
 Anwendungen sowie in Audio- und Videomedien verwendet werden duerfen, sofern
 die Google-Cloud-Bedingungen und das anwendbare Recht eingehalten werden:

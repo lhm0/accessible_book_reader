@@ -139,6 +139,38 @@ def test_textline_orientation_keeps_classifier_vote_when_recognition_is_ambiguou
     assert "decision=classifier" in result["reason"]
 
 
+def test_textline_orientation_recognition_resolves_ambiguous_classifier_vote() -> None:
+    image = np.full((600, 900, 3), 255, dtype=np.uint8)
+
+    class FakeBackend:
+        def __init__(self) -> None:
+            self.recognition_calls = 0
+
+        def detect_text_line_crops(self, image, *, count: int, language: str):
+            return [image] * count, [(0, index, 10, 1) for index in range(count)]
+
+        def classify_text_orientation(self, images, language: str = "de"):
+            return [("0", 0.87), ("180", 0.96), ("0", 0.20)]
+
+        def recognize(self, image, language: str = "de"):
+            self.recognition_calls += 1
+            confidence = 0.98 if self.recognition_calls == 1 else 0.30
+            text = "Eine gut lesbare Textzeile." if self.recognition_calls == 1 else "rrr 11"
+            return [
+                OCRLine(
+                    text=text,
+                    confidence=confidence,
+                    bbox=((0, 0), (1, 0), (1, 1), (0, 1)),
+                )
+            ]
+
+    result = detect_page_orientation_from_text_lines(image, FakeBackend())
+
+    assert result["rotation_deg"] == 0
+    assert "votes=0:0.870,180:0.960" in result["reason"]
+    assert "decision=recognition" in result["reason"]
+
+
 def test_textline_orientation_rejects_missing_lines_instead_of_guessing_zero() -> None:
     image = np.full((200, 300, 3), 255, dtype=np.uint8)
 
@@ -154,7 +186,7 @@ def test_textline_orientation_rejects_missing_lines_instead_of_guessing_zero() -
     try:
         detect_page_orientation_from_text_lines(image, FakeBackend())
     except RuntimeError as exc:
-        assert "nur 0 von 3 Textzeilen" in str(exc)
+        assert "Textzeilen=0/3" in str(exc)
     else:
         raise AssertionError("Expected missing orientation lines to abort")
 

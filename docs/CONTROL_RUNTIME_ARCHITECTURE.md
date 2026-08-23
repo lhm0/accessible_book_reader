@@ -341,7 +341,9 @@ The subsequent selection logic is:
   margin greater than `0.35` are required.
 - A text-rich probe is additionally recognized at both `0` and `180` degrees.
   A clear OCR-quality advantage corrects a confidently wrong classifier vote;
-  an ambiguous comparison leaves the classifier result unchanged.
+  it also decides when the classifier vote is incomplete or ambiguous. Only
+  when the OCR comparison is ambiguous too does a usable classifier result
+  remain in effect or the per-book marker act as the final fallback.
 - An upright result keeps the captured left/right assignment. An upside-down
   result swaps the two page files before normal OCR preparation.
 - `case/right.jpg` is then rotated by 180 degrees. This makes the correction

@@ -406,28 +406,14 @@ def detect_page_orientation_from_text_lines(
         for label, confidence in classifications
         if confidence >= ORIENTATION_CLASSIFIER_MIN_CONFIDENCE
     ]
-    if len(line_images) < ORIENTATION_LINE_COUNT:
-        raise OrientationDetectionError(
-            "OCR-Orientierung nicht bestimmbar: "
-            f"nur {len(line_images)} von {ORIENTATION_LINE_COUNT} Textzeilen gefunden."
-        )
-    if len(accepted) < 2:
-        raise OrientationDetectionError(
-            "OCR-Orientierung nicht bestimmbar: "
-            f"nur {len(accepted)} verlaessliche Klassifikationen erhalten."
-        )
     vote_0 = sum(confidence for label, confidence in accepted if label == "0")
     vote_180 = sum(confidence for label, confidence in accepted if label == "180")
-    if vote_180 > vote_0 + ORIENTATION_VOTE_MARGIN:
+    classifier_rotation_deg: int | None = None
+    classifier_is_usable = len(line_images) == ORIENTATION_LINE_COUNT and len(accepted) >= 2
+    if classifier_is_usable and vote_180 > vote_0 + ORIENTATION_VOTE_MARGIN:
         classifier_rotation_deg = 180
-    elif vote_0 > vote_180 + ORIENTATION_VOTE_MARGIN:
+    elif classifier_is_usable and vote_0 > vote_180 + ORIENTATION_VOTE_MARGIN:
         classifier_rotation_deg = 0
-    else:
-        raise OrientationDetectionError(
-            "OCR-Orientierung nicht eindeutig: "
-            f"votes=0:{vote_0:.3f},180:{vote_180:.3f}, "
-            f"erforderlicher Vorsprung={ORIENTATION_VOTE_MARGIN:.3f}."
-        )
 
     rotation_deg = classifier_rotation_deg
     verification_reason = "recognition-verification=unavailable"
@@ -448,6 +434,15 @@ def detect_page_orientation_from_text_lines(
             f"recognition-verification ocr0={float(verification['score_0']):.3f},"
             f"ocr180={float(verification['score_180']):.3f},delta={score_delta:.3f},"
             f"epsilon={ORIENTATION_SCORE_EPSILON:.3f},decision={decision}"
+        )
+    if rotation_deg is None:
+        raise OrientationDetectionError(
+            "OCR-Orientierung nicht bestimmbar: "
+            f"Textzeilen={len(line_images)}/{ORIENTATION_LINE_COUNT}, "
+            f"verlaessliche Klassifikationen={len(accepted)}/{len(classifications)}, "
+            f"votes=0:{vote_0:.3f},180:{vote_180:.3f}, "
+            f"erforderlicher Vorsprung={ORIENTATION_VOTE_MARGIN:.3f}; "
+            f"{verification_reason}."
         )
     reason = (
         f"textline-classifier boxes={line_boxes}, results={classifications}, "

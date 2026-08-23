@@ -456,8 +456,10 @@ Am realen Scanner verifizierte OCR-Bildzuordnung:
   Textzeilen fuer den RapidOCR-Winkelklassifikator
 - ein textreicher Ausschnitt wird zusaetzlich bei `0` und `180` Grad wirklich
   erkannt; ein klarer OCR-Qualitaetsvorsprung korrigiert ein falsches, aber
-  selbstbewusstes Klassifikatorvotum, waehrend ein uneindeutiger Vergleich die
-  Klassifikatorentscheidung belaesst
+  selbstbewusstes Klassifikatorvotum und entscheidet auch bei einem
+  unvollstaendigen oder uneindeutigen Klassifikatorvotum; nur wenn auch der
+  OCR-Vergleich uneindeutig bleibt, gilt ein brauchbares Klassifikatorergebnis
+  beziehungsweise als letzter Fallback der buchweise Merker
 - Votum `0` = `case/left.jpg` und `case/right.jpg` bleiben zugeordnet
 - Votum `180` = beide Dateien werden vor der normalen OCR vertauscht
 - nach dieser Zuordnung wird `case/right.jpg` einmalig um `180` Grad gedreht

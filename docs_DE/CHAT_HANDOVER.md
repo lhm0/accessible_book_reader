@@ -735,6 +735,12 @@ abgebrochen; dadurch werden Bildvorbereitung und OCR rechts nicht mehr
 gestartet. Das anschliessende `CANCELLED`-Ereignis bringt die Runtime ohne
 zusaetzliche Abbruchansage zurueck nach `IDLE`.
 
+Nach vollstaendig abgespielter rechter Seite einer Doppelseite stellt die
+Runtime `tatata.wav` aus dem aktiven Sprachordner als Umblättersignal in die
+Systemaudio-Queue. Ausloeser ist ausschliesslich der erfolgreiche
+Wiedergabeabschluss. Bei Stop/Abbruch, TTS- oder Wiedergabefehler sowie nach
+der linken Seite oder einer Zusammenfassung wird das Signal nicht abgespielt.
+
 ### 8b. Lange Zusammenfassungen in mehrere TTS-Teile zerlegen
 
 Der zuvor komplette Summary-Text wurde als eine einzelne TTS-Anfrage

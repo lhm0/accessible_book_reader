@@ -80,6 +80,7 @@ class _FakePageAudioPlayer:
         self.shutdown_calls = 0
         self.audio_ready_callback = None
         self.error_callback = None
+        self.playback_completed_callback = None
 
     def enqueue_pages(self, pages) -> None:
         self.enqueued.append([page.speak_text for page in pages])
@@ -105,6 +106,9 @@ class _FakePageAudioPlayer:
 
     def set_error_callback(self, callback) -> None:
         self.error_callback = callback
+
+    def set_playback_completed_callback(self, callback) -> None:
+        self.playback_completed_callback = callback
 
 
 class _FakeVolumeController:
@@ -1389,6 +1393,40 @@ def test_runtime_controller_can_abort_active_page_audio(tmp_path: Path) -> None:
     assert any("laufende Seitenausgabe wird abgebrochen" in status for status in statuses)
 
 
+def test_runtime_controller_plays_turn_page_signal_only_after_right_page(tmp_path: Path) -> None:
+    played_messages: list[str] = []
+    page_audio_player = _FakePageAudioPlayer()
+    controller = RuntimeController(
+        monitor=FrontPanelMonitor(gpio=_FakeGPIO()),
+        job_manager=ForegroundJobManager(),
+        page_ingest_config=PageIngestRuntimeConfig(
+            library_root=tmp_path / "library",
+            turn_page_message_name="tatata.wav",
+        ),
+        page_audio_player=page_audio_player,
+    )
+    original = runtime_module.play_system_message
+    runtime_module.play_system_message = (
+        lambda message_name, config=None, **kwargs: played_messages.append(message_name) or Path("ok.wav")
+    )
+    try:
+        assert page_audio_player.playback_completed_callback is not None
+        page_audio_player.playback_completed_callback("left:12")
+        time.sleep(0.02)
+        assert played_messages == []
+
+        page_audio_player.playback_completed_callback("right:13")
+        deadline = time.monotonic() + 1.0
+        while time.monotonic() < deadline and not played_messages:
+            time.sleep(0.01)
+    finally:
+        runtime_module.play_system_message = original
+        controller.stop()
+        controller.job_manager.shutdown()
+
+    assert played_messages == ["tatata.wav"]
+
+
 def test_runtime_controller_chapter_summary_button_enqueues_latest_summary_audio(tmp_path: Path) -> None:
     statuses: list[str] = []
     played_messages: list[str] = []
@@ -2173,7 +2211,11 @@ def test_synchronous_system_message_observes_encoder_volume_callback_during_play
 
 def test_page_audio_player_prefetches_right_page_during_left_playback(tmp_path: Path) -> None:
     statuses: list[str] = []
-    player = runtime_module.PageAudioPlayer(status_callback=statuses.append)
+    completed_labels: list[str] = []
+    player = runtime_module.PageAudioPlayer(
+        status_callback=statuses.append,
+        playback_completed_callback=completed_labels.append,
+    )
     playback_started = runtime_module.Event()
     left_playback_finished = runtime_module.Event()
     synth_order: list[str] = []
@@ -2229,6 +2271,7 @@ def test_page_audio_player_prefetches_right_page_during_left_playback(tmp_path: 
 
     assert synth_order == ["left:1", "right:2"]
     assert play_order == ["left:1", "right:2"]
+    assert completed_labels == ["left:1", "right:2"]
 
 
 def test_page_audio_player_prefetches_later_enqueued_page_during_current_playback(tmp_path: Path) -> None:
@@ -2295,6 +2338,51 @@ def test_page_audio_player_prefetches_later_enqueued_page_during_current_playbac
 
     assert synth_order == ["left:1", "right:2"]
     assert play_order == ["left:1", "right:2"]
+
+
+def test_page_audio_player_does_not_report_cancelled_playback_as_completed(tmp_path: Path) -> None:
+    playback_started = runtime_module.Event()
+    release_playback = runtime_module.Event()
+    completed_labels: list[str] = []
+    player = runtime_module.PageAudioPlayer(playback_completed_callback=completed_labels.append)
+
+    def _fake_synthesize_page_audio(text: str, page_label: str) -> Path:
+        output_path = tmp_path / f"{page_label.replace(':', '_')}.wav"
+        output_path.write_text(text, encoding="utf-8")
+        return output_path
+
+    def _fake_play_audio_file(audio_path: Path, page_label: str, generation: int) -> None:
+        del audio_path, page_label, generation
+        playback_started.set()
+        assert release_playback.wait(timeout=1.0)
+
+    player._synthesize_page_audio = _fake_synthesize_page_audio  # type: ignore[method-assign]
+    player._play_audio_file = _fake_play_audio_file  # type: ignore[method-assign]
+    try:
+        player.enqueue_pages(
+            (
+                runtime_module.PageRecord(
+                    page_id="page_0013",
+                    scan_id="scan_1",
+                    created_at="2026-08-23T10:00:00Z",
+                    side="right",
+                    clean_text="Rechts",
+                    speak_text="Rechts",
+                    page_number=13,
+                ),
+            )
+        )
+        assert playback_started.wait(timeout=1.0)
+        player.cancel()
+        release_playback.set()
+        deadline = time.monotonic() + 1.0
+        while time.monotonic() < deadline and player.is_active():
+            time.sleep(0.01)
+    finally:
+        release_playback.set()
+        player.shutdown()
+
+    assert completed_labels == []
 
 
 def test_prepare_page_tts_input_uses_longer_ssml_break_after_chapter_announcement() -> None:

@@ -216,6 +216,13 @@ playback continuous. Every scaled PCM block is also flushed to the pipe
 immediately instead of accumulating multiple blocks in Python's write buffer,
 so volume changes remain perceptible with well under one second of latency.
 
+After the right page of a spread has played completely, the runtime queues
+`tatata.wav` from the active language directory as the turn-page signal. The
+signal is tied to the successful playback-completion callback, not to OCR,
+TTS generation, or queue submission. Cancelling playback, a playback error,
+or a TTS failure therefore does not emit the signal. Left-page completion and
+summary playback do not emit it either.
+
 ## Usage Statistics
 
 The production `control_panel_service` creates a `UsageStatisticsStore` below

@@ -131,6 +131,7 @@ class PageIngestRuntimeConfig:
     missing_summary_message_name: str = "keine_zusammenfassung"
     wrong_direction_message_name: str = "wrong_direction.wav"
     repeat_page_message_name: str = "repeat_page.wav"
+    turn_page_message_name: str = "tatata.wav"
 
 
 @dataclass(frozen=True)
@@ -195,6 +196,7 @@ class PageAudioPlayer:
         volume_provider: Callable[[], int] | None = None,
         audio_ready_callback: Callable[[str], None] | None = None,
         playback_duration_callback: Callable[[float], None] | None = None,
+        playback_completed_callback: Callable[[str], None] | None = None,
         error_callback: Callable[[BaseException], None] | None = None,
     ) -> None:
         self.config = config
@@ -202,6 +204,7 @@ class PageAudioPlayer:
         self.volume_provider = volume_provider
         self.audio_ready_callback = audio_ready_callback
         self.playback_duration_callback = playback_duration_callback
+        self.playback_completed_callback = playback_completed_callback
         self.error_callback = error_callback
         self._lock = Lock()
         self._condition = Condition(self._lock)
@@ -309,6 +312,9 @@ class PageAudioPlayer:
     def set_playback_duration_callback(self, callback: Callable[[float], None] | None) -> None:
         self.playback_duration_callback = callback
 
+    def set_playback_completed_callback(self, callback: Callable[[str], None] | None) -> None:
+        self.playback_completed_callback = callback
+
     def _run(self) -> None:
         while True:
             item = self._wait_for_next_utterance()
@@ -352,6 +358,11 @@ class PageAudioPlayer:
                         raise playback_error
                     if self._is_cancelled(generation):
                         break
+                    if self.playback_completed_callback is not None:
+                        try:
+                            self.playback_completed_callback(current_label)
+                        except BaseException as exc:  # pragma: no cover - callback must not break playback
+                            self._emit_status(f"Abschlussmeldung fuer Seitenausgabe fehlgeschlagen: {exc}")
 
                     if prefetched_worker is not None and prefetched_result is not None and prefetched_item is not None:
                         prefetched_worker.join()
@@ -1082,6 +1093,9 @@ class RuntimeController:
             set_duration_callback = getattr(self.page_audio_player, "set_playback_duration_callback", None)
             if callable(set_duration_callback):
                 set_duration_callback(self._record_audio_playback_duration)
+            set_completed_callback = getattr(self.page_audio_player, "set_playback_completed_callback", None)
+            if callable(set_completed_callback):
+                set_completed_callback(self._handle_page_audio_completed)
         if self.volume_controller is not None:
             try:
                 state = self.volume_controller.initialize()
@@ -1713,6 +1727,12 @@ class RuntimeController:
 
     def _handle_page_audio_error(self, _exc: BaseException) -> None:
         self._stop_start_wait_heartbeat()
+
+    def _handle_page_audio_completed(self, page_label: str) -> None:
+        if not page_label.startswith("right:"):
+            return
+        self._emit_status("Doppelseiten-Ausgabe abgeschlossen: Umblättersignal wird abgespielt.")
+        self._play_system_message_async(self.page_ingest_config.turn_page_message_name)
 
     def _handle_completed_chapters(self, tag_id: str) -> None:
         if self.chapter_assembler is None:

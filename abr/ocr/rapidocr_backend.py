@@ -112,6 +112,16 @@ class RapidOCRBackend(OCRBackend):
         normalized_language = language.strip().lower()
         engine = self._get_engine(normalized_language)
         result = engine(image)
+        return self._normalize_recognized_lines(result, normalized_language)
+
+    def recognize_orientation_probe(self, image, language: str = "de") -> list[OCRLine]:
+        """Recognize a probe while explicitly resetting RapidOCR's call mode."""
+        normalized_language = language.strip().lower()
+        engine = self._get_engine(normalized_language)
+        result = engine(image, use_det=True, use_cls=False, use_rec=True)
+        return self._normalize_recognized_lines(result, normalized_language)
+
+    def _normalize_recognized_lines(self, result: object, normalized_language: str) -> list[OCRLine]:
         output = self._normalize_output(result)
         lines = self._build_lines(output)
         model_profile = "default" if normalized_language == "de" else "en-ppocrv5-mobile"

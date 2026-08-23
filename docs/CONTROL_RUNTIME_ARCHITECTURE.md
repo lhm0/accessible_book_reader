@@ -344,6 +344,9 @@ The subsequent selection logic is:
   it also decides when the classifier vote is incomplete or ambiguous. Only
   when the OCR comparison is ambiguous too does a usable classifier result
   remain in effect or the per-book marker act as the final fallback.
+  Probe recognition explicitly resets RapidOCR from classification to full
+  detection/recognition mode because some RapidOCR versions retain per-call
+  mode flags on a reused engine instance.
 - An upright result keeps the captured left/right assignment. An upside-down
   result swaps the two page files before normal OCR preparation.
 - `case/right.jpg` is then rotated by 180 degrees. This makes the correction

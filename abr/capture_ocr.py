@@ -474,12 +474,13 @@ def _detect_orientation_simple(
     language: str = "de",
 ) -> dict[str, object]:
     timings: dict[str, float] = {}
+    recognize_probe = getattr(ocr_backend, "recognize_orientation_probe", ocr_backend.recognize)
     probe_search_started = time.monotonic()
     probe_image, probe_bbox, probe_score = _select_text_probe(image)
     timings["orientation_probe_search_sec"] = time.monotonic() - probe_search_started
 
     probe_ocr_started = time.monotonic()
-    lines_0 = ocr_backend.recognize(probe_image, language=language)
+    lines_0 = recognize_probe(probe_image, language=language)
     timings["orientation_probe_ocr_0_sec"] = time.monotonic() - probe_ocr_started
 
     rotate_started = time.monotonic()
@@ -487,7 +488,7 @@ def _detect_orientation_simple(
     timings["orientation_probe_rotate_sec"] = time.monotonic() - rotate_started
 
     probe_ocr_started = time.monotonic()
-    lines_180 = ocr_backend.recognize(probe_rotated, language=language)
+    lines_180 = recognize_probe(probe_rotated, language=language)
     timings["orientation_probe_ocr_180_sec"] = time.monotonic() - probe_ocr_started
 
     score_0 = _score_ocr_lines(lines_0)

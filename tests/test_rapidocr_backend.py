@@ -186,6 +186,34 @@ def test_rapidocr_backend_exposes_textline_orientation_classifier() -> None:
     ]
 
 
+def test_rapidocr_backend_orientation_probe_resets_engine_to_recognition_mode() -> None:
+    calls: list[dict[str, object]] = []
+
+    class FakeRapidOCR:
+        def __call__(self, image, **kwargs):
+            del image
+            calls.append(kwargs)
+            if kwargs.get("use_rec") is False:
+                return SimpleNamespace(cls_res=[("180", 0.97)])
+            return FakeRapidOutput(
+                boxes=[[(1, 2), (11, 2), (11, 8), (1, 8)]],
+                txts=["Aufrechter Text"],
+                scores=[0.95],
+            )
+
+    backend = RapidOCRBackend()
+    backend._engines["de"] = FakeRapidOCR()
+
+    assert backend.classify_text_orientation([object()]) == [("180", 0.97)]
+    lines = backend.recognize_orientation_probe(np.zeros((20, 30, 3), dtype=np.uint8))
+
+    assert calls == [
+        {"use_det": False, "use_cls": True, "use_rec": False},
+        {"use_det": True, "use_cls": False, "use_rec": True},
+    ]
+    assert [line.text for line in lines] == ["Aufrechter Text"]
+
+
 def test_rapidocr_backend_detects_three_tight_long_textline_crops() -> None:
     image = np.zeros((500, 800, 3), dtype=np.uint8)
 

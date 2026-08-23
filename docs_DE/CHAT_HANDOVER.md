@@ -460,6 +460,9 @@ Am realen Scanner verifizierte OCR-Bildzuordnung:
   unvollstaendigen oder uneindeutigen Klassifikatorvotum; nur wenn auch der
   OCR-Vergleich uneindeutig bleibt, gilt ein brauchbares Klassifikatorergebnis
   beziehungsweise als letzter Fallback der buchweise Merker
+- die Probe-Erkennung setzt RapidOCR explizit vom reinen Klassifikationsmodus
+  auf Detection und Recognition zurueck, da die Pi-Version Aufrufparameter an
+  einer wiederverwendeten Engine-Instanz beibehalten kann
 - Votum `0` = `case/left.jpg` und `case/right.jpg` bleiben zugeordnet
 - Votum `180` = beide Dateien werden vor der normalen OCR vertauscht
 - nach dieser Zuordnung wird `case/right.jpg` einmalig um `180` Grad gedreht

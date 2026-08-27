@@ -1,0 +1,4 @@
+﻿Designator,Footprint,Quantity,Value,LCSC Part #
+J1,3_pin,1,Conn_01x03_Pin,
+J2,2_pin,1,Conn_01x02_Pin,
+SW1,RotaryEncoder_Alps_EC11E-Switch_Vertical_H20mm,1,volume_knob,

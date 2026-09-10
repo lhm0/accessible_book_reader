@@ -267,7 +267,13 @@ def test_page_ingestor_normalizes_uppercase_heading_only_in_speak_text(tmp_path:
     assert result.pages[0].speak_text == "Erlebnis In Der Knabenzeit\n\nDer Schlosser Mohr ging nach Hause."
 
 
-def test_page_ingestor_applies_german_pronunciation_substitutions_only_in_speak_text(tmp_path: Path) -> None:
+@pytest.mark.parametrize(("source", "spoken"), [
+    ("Dr. Müller ging zur Notre-Dame.", "Doktor Müller ging zur Notre Damm."),
+    ("K. nahm z.B. einen Hut.", "K nahm zum Beispiel einen Hut."),
+])
+def test_page_ingestor_applies_german_pronunciation_substitutions_only_in_speak_text(
+    tmp_path: Path, source: str, spoken: str,
+) -> None:
     report_path = tmp_path / "captures" / "scan_doctor" / "ocr_text" / "report.json"
     report_path.parent.mkdir(parents=True)
     report_path.write_text(
@@ -280,7 +286,7 @@ def test_page_ingestor_applies_german_pronunciation_substitutions_only_in_speak_
                         "page_number": 25,
                         "ocr_lines": [
                             {
-                                "text": "Dr. Müller ging zur Notre-Dame.",
+                                "text": source,
                                 "bbox": [[90, 140], [700, 140], [700, 170], [90, 170]],
                             }
                         ],
@@ -295,8 +301,8 @@ def test_page_ingestor_applies_german_pronunciation_substitutions_only_in_speak_
 
     result = PageIngestor(BookStore(tmp_path / "library")).ingest_report("book42", report_path)
 
-    assert result.pages[0].clean_text == "Dr. Müller ging zur Notre-Dame."
-    assert result.pages[0].speak_text == "Doktor Müller ging zur Notre Damm."
+    assert result.pages[0].clean_text == source
+    assert result.pages[0].speak_text == spoken
 
 
 def test_page_ingestor_does_not_prepend_bracketed_ocr_tail_artifact(tmp_path: Path) -> None:

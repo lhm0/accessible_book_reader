@@ -1,4 +1,18 @@
+import pytest
+
 from abr.text_logic import OCRTextPostProcessor
+
+
+@pytest.mark.parametrize(("text", "expected"), [
+    ("K. ging weiter. Dann sprach A. mit ihm.", "K ging weiter. Dann sprach A mit ihm."),
+    ("Auch k. und Ä. bleiben erhalten.", "Auch k und Ä bleiben erhalten."),
+    ("K.\nkam zurück.", "K\nkam zurück."),
+    ("K. nahm z.B. einen Hut.", "K nahm zum Beispiel einen Hut."),
+    ("Er nahm z. B. einen Hut.", "Er nahm zum Beispiel einen Hut."),
+    ("Wort. Am 1. Mai. Dr.med K.Ende K.", "Wort. Am 1. Mai. Dr.med K.Ende K."),
+])
+def test_postprocessor_normalizes_initials_and_examples_for_speech(text: str, expected: str) -> None:
+    assert OCRTextPostProcessor().normalize_german_spoken_text(text) == expected
 
 
 def test_postprocessor_merges_hyphenated_line_breaks() -> None:

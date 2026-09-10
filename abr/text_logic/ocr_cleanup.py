@@ -10,6 +10,8 @@ class OCRTextPostProcessor:
         flags=re.UNICODE,
     )
     _GERMAN_DOCTOR_ABBREVIATION_RE = re.compile(r"(?<!\w)Dr\.(?=\s|$)")
+    _GERMAN_EXAMPLE_ABBREVIATION_RE = re.compile(r"(?<!\w)z\.\s*B\.(?!\w)")
+    _SINGLE_LETTER_PERIOD_RE = re.compile(r"(?<![\w.])([^\W\d_])\.(?=\s)")
     _GERMAN_NOTRE_DAME_RE = re.compile(r"(?<![\w-])Notre-Dame(?![\w-])")
 
     def build_paragraph_text(self, line_texts: list[str]) -> str:
@@ -32,7 +34,10 @@ class OCRTextPostProcessor:
     def expand_german_spoken_abbreviations(self, text: str) -> str:
         """Expand abbreviations whose punctuation would mislead German TTS."""
 
-        return self._GERMAN_DOCTOR_ABBREVIATION_RE.sub("Doktor", text)
+        expanded = self._GERMAN_DOCTOR_ABBREVIATION_RE.sub("Doktor", text)
+        # Expand multi-letter abbreviations before removing initial punctuation.
+        expanded = self._GERMAN_EXAMPLE_ABBREVIATION_RE.sub("zum Beispiel", expanded)
+        return self._SINGLE_LETTER_PERIOD_RE.sub(r"\1", expanded)
 
     def normalize_german_spoken_text(self, text: str) -> str:
         """Apply German-only pronunciation substitutions for TTS."""

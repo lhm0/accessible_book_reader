@@ -1,49 +1,46 @@
 # Accessible Book Reader
 
-Software- und Hardware-Repository fuer den `Accessible Book Reader` (`ABR`).
+**Gedruckte Bücher hören – und auf Tastendruck erfahren, was bisher geschah.**
 
-Englische Leitfassung: [readme.md](readme.md)
+![Accessible Book Reader mit aufgelegtem Buch, Lautsprecher, drei Tasten und Lautstärkeregler](images/img0002.jpg)
 
-## Lizenz
+Der **Accessible Book Reader (ABR)** ist ein Vorlesegerät auf Basis des
+Raspberry Pi 5. Er soll Menschen, denen das Lesen gedruckter Texte schwerfällt,
+den Zugang zu ihren Büchern erleichtern. Ein aufgeschlagenes Buch auflegen,
+eine Taste drücken und zuhören: Zwei Kameras erfassen die Doppelseite,
+das Gerät erkennt den Text und liest die Seiten nacheinander vor.
+Ein Tonsignal zeigt an, wann von Hand umgeblättert werden kann.
 
-Der Accessible Book Reader ist ein Open-Source-/Open-Hardware-Projekt mit
-starkem Copyleft. Wegen der unterschiedlichen Arten von Projektmaterial gilt
-ein klar abgegrenztes Mehrfachlizenzmodell:
+Auch nach einer Lesepause hilft ABR beim Wiedereinstieg: Auf Tastendruck
+fasst er die zuletzt erfassten Abschnitte oder den bisher gelesenen Buchinhalt
+zusammen. NFC-Tags machen Bücher wiedererkennbar und ordnen ihnen die
+gespeicherten Texte und Zusammenfassungen zu. Drei Tasten, ein Drehregler
+und gesprochene Hinweise bilden die Bedienoberfläche am Gerät.
 
-- eigener Software- und Firmwarecode: `GPL-3.0-or-later`
-- eigene Elektronik-, Mechanik- und sonstige Hardwaredesigns:
-  `CERN-OHL-S-2.0`
-- Dokumentation und eindeutig eigene Medien: `CC-BY-SA-4.0`
-- Fremdbibliotheken: unveraendert unter ihrer jeweiligen Originallizenz
+ABR verbindet ein eigenes Gehäuse mit eigener Elektronik und offener Software.
+Dieses Repository enthält den Programmcode, Schaltpläne, mechanische
+Konstruktionsdateien und die Dokumentation für Nachbau und Weiterentwicklung.
+Buchsprachenprofile für Deutsch und U.S.-Englisch sind integriert.
+Die Texterkennung läuft lokal auf dem Raspberry Pi; Sprachausgabe und
+KI-Zusammenfassungen verwenden im aktuellen Betrieb Google-Cloud-Dienste
+und benötigen einen Internetzugang sowie ein eingerichtetes Cloud-Konto.
 
-Die mit Google Cloud Text-to-Speech erzeugten Systemansagen enthalten einen
-eigenen [Herkunfts- und Nutzungshinweis](system_audio/messages/README.md).
+Der reale Geräteaufbau ist erprobt und wird weiterentwickelt. Derzeit stehen
+Langzeittests und der Feinschliff der Zusammenfassungen im Mittelpunkt.
+Für die Bucherkennung wird aktuell ein modifiziertes Breakout-Board eines
+PN5180-NFC-Readers verwendet; der Aufbau ist im Repository dokumentiert.
+Parallel wird ein eigener NFC-Reader entwickelt, der sich leichter nachbauen
+lassen soll.
+Rückmeldungen aus der Nutzung, Erfahrungen beim Nachbau und Beiträge zur
+Weiterentwicklung sind willkommen.
 
-Die GPL und CERN-OHL-S erlauben auch kommerzielle Nutzung, verlangen bei der
-Weitergabe abgeleiteter Software beziehungsweise Hardware aber die jeweils
-vorgesehene Bereitstellung des vollstaendigen Quellmaterials unter den
-Copyleft-Bedingungen. Eine allgemeine Ausnahme fuer geschlossene kommerzielle
-Weiterentwicklungen besteht nicht.
+Englische Leitfassung: [readme.md](readme.md) ·
+[Installation](#installation) ·
+[Hardware](hardware/README.md) ·
+[Mitwirken](CONTRIBUTING.md) ·
+[Lizenz](#lizenz)
 
-Die verbindliche Abgrenzung, Ausnahmen fuer Fremdcode und Hinweise zu nicht
-mitlizenzierten Drittmaterialien stehen in [LICENSE.md](LICENSE.md); die
-vollstaendigen Lizenztexte liegen unter [`LICENSES/`](LICENSES/). Hinweise zu
-eingebundenem Fremdcode stehen in
-[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). Fuer
-Beitraege gelten [CONTRIBUTING.md](CONTRIBUTING.md) und die
-[Contributor License Agreement](CLA.md). Die Contributor-Vereinbarung erhaelt
-das Eigentum der Beitragenden, erlaubt dem Projektinhaber aber zusaetzlich eine
-parallele kommerzielle Lizenzierung fuer spaetere Firmenkooperationen.
-Firmenkooperationen, die von diesen oeffentlichen Lizenzen abweichen sollen,
-erfordern einen separaten Entwicklungs- und Lizenzvertrag mit den jeweiligen
-Rechteinhabern.
-
-Es wurde keine Patent- oder Freedom-to-Operate-Recherche durchgefuehrt. Die
-Lizenzen koennen nur Rechte einraeumen, ueber die der jeweilige Lizenzgeber
-verfuegen darf; sie geben keine Zusicherung, dass Herstellung, Nutzung oder
-Vertrieb keine Rechte Dritter beruehren. Der vollstaendige Hinweis und die
-besondere Abgrenzung zwischen privatem Nachbau und kommerzieller Nutzung
-stehen in [PATENT_NOTICE.md](PATENT_NOTICE.md).
+## Entwicklungsstand
 
 Der Projektstand ist inzwischen ueber den reinen OCR-/TTS-Prototyp hinaus:
 
@@ -653,3 +650,44 @@ Empfehlung:
 - [docs_DE/WIFI_PROFILES.md](docs_DE/WIFI_PROFILES.md)
 - [docs_DE/REMOTE_MAINTENANCE_EMAIL.md](docs_DE/REMOTE_MAINTENANCE_EMAIL.md)
 - [hardware/README.md](hardware/README.md)
+
+## Lizenz
+
+Der Accessible Book Reader ist ein Open-Source-/Open-Hardware-Projekt mit
+starkem Copyleft. Wegen der unterschiedlichen Arten von Projektmaterial gilt
+ein klar abgegrenztes Mehrfachlizenzmodell:
+
+- eigener Software- und Firmwarecode: `GPL-3.0-or-later`
+- eigene Elektronik-, Mechanik- und sonstige Hardwaredesigns:
+  `CERN-OHL-S-2.0`
+- Dokumentation und eindeutig eigene Medien: `CC-BY-SA-4.0`
+- Fremdbibliotheken: unveraendert unter ihrer jeweiligen Originallizenz
+
+Die mit Google Cloud Text-to-Speech erzeugten Systemansagen enthalten einen
+eigenen [Herkunfts- und Nutzungshinweis](system_audio/messages/README.md).
+
+Die GPL und CERN-OHL-S erlauben auch kommerzielle Nutzung, verlangen bei der
+Weitergabe abgeleiteter Software beziehungsweise Hardware aber die jeweils
+vorgesehene Bereitstellung des vollstaendigen Quellmaterials unter den
+Copyleft-Bedingungen. Eine allgemeine Ausnahme fuer geschlossene kommerzielle
+Weiterentwicklungen besteht nicht.
+
+Die verbindliche Abgrenzung, Ausnahmen fuer Fremdcode und Hinweise zu nicht
+mitlizenzierten Drittmaterialien stehen in [LICENSE.md](LICENSE.md); die
+vollstaendigen Lizenztexte liegen unter [`LICENSES/`](LICENSES/). Hinweise zu
+eingebundenem Fremdcode stehen in
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). Fuer
+Beitraege gelten [CONTRIBUTING.md](CONTRIBUTING.md) und die
+[Contributor License Agreement](CLA.md). Die Contributor-Vereinbarung erhaelt
+das Eigentum der Beitragenden, erlaubt dem Projektinhaber aber zusaetzlich eine
+parallele kommerzielle Lizenzierung fuer spaetere Firmenkooperationen.
+Firmenkooperationen, die von diesen oeffentlichen Lizenzen abweichen sollen,
+erfordern einen separaten Entwicklungs- und Lizenzvertrag mit den jeweiligen
+Rechteinhabern.
+
+Es wurde keine Patent- oder Freedom-to-Operate-Recherche durchgefuehrt. Die
+Lizenzen koennen nur Rechte einraeumen, ueber die der jeweilige Lizenzgeber
+verfuegen darf; sie geben keine Zusicherung, dass Herstellung, Nutzung oder
+Vertrieb keine Rechte Dritter beruehren. Der vollstaendige Hinweis und die
+besondere Abgrenzung zwischen privatem Nachbau und kommerzieller Nutzung
+stehen in [PATENT_NOTICE.md](PATENT_NOTICE.md).

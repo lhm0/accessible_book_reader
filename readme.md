@@ -1,45 +1,44 @@
 # Accessible Book Reader
 
-Software and hardware repository for the `Accessible Book Reader` (`ABR`).
+**Listen to printed books – and catch up on the story at the press of a button.**
 
-German documentation: [readme_DE.md](readme_DE.md)
+![Accessible Book Reader with a book in place, a speaker, three buttons and a volume knob](images/img0002.jpg)
 
-## Licence
+The **Accessible Book Reader (ABR)** is a reading device built around the
+Raspberry Pi 5. It aims to make books more accessible to people who find
+printed text difficult to read. Place an open book on the device, press a
+button and listen: two cameras capture the spread, the device recognises
+the text and reads both pages aloud in order. A sound signals when it is
+time to turn the page by hand.
 
-The Accessible Book Reader is an open-source and open-hardware project with
-strong copyleft. Different kinds of project material use a clearly separated
-multi-licence model:
+After a break, ABR can help you find your place in the story. At the press
+of a button, it summarises the most recently captured sections or the book
+so far. NFC tags identify each book and link it to its saved text and
+summaries. Three buttons, a volume knob and spoken prompts provide the
+on-device controls.
 
-- original software and firmware: `GPL-3.0-or-later`
-- original electronics, mechanics, and other hardware designs:
-  `CERN-OHL-S-2.0`
-- documentation and clearly identified original media: `CC-BY-SA-4.0`
-- third-party libraries: their respective original licences
+ABR combines a custom enclosure and electronics with open-source software.
+This repository contains the code, circuit schematics, mechanical design
+files and documentation for building and improving the device. Book-language
+profiles for German and U.S. English are integrated. Text recognition runs
+locally on the Raspberry Pi; the current speech and AI summary features use
+Google Cloud services and require an internet connection and a configured
+cloud account.
 
-The system messages generated with Google Cloud Text-to-Speech have a
-dedicated [provenance and usage notice](system_audio/messages/README.md).
+The physical device has been tested and is under active development.
+Current work focuses on long-term testing and refining summaries.
+Book identification currently uses a modified PN5180 NFC reader breakout
+board; the setup is documented in this repository. A custom NFC reader is
+also being developed to make the hardware easier to reproduce.
+Feedback from users, build experiences and contributions are welcome.
 
-GPL and CERN-OHL-S permit commercial use, but distribution of derived
-software or hardware requires the corresponding complete source material to
-be made available under the applicable copyleft terms. There is no general
-exception for closed commercial derivatives.
+[Deutsche Dokumentation](readme_DE.md) ·
+[Installation](#installation) ·
+[Hardware](hardware/README.md) ·
+[Contributing](CONTRIBUTING.md) ·
+[Licence](#licence)
 
-The binding scope, third-party exceptions, and exclusions are documented in
-[LICENSE.md](LICENSE.md). Full licence texts are stored in [`LICENSES/`](LICENSES/),
-and bundled third-party components are documented in
-[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). Contributions are governed
-by [CONTRIBUTING.md](CONTRIBUTING.md) and the
-[Contributor License Agreement](CLA.md). Contributors retain ownership while
-granting the project owner the additional right to offer parallel commercial
-licences for future business cooperation. Any cooperation that departs from
-the public licences requires a separate development and licence agreement
-with the relevant rights holders.
-
-No patent or freedom-to-operate search has been performed. The licences can
-grant only rights controlled by the respective licensor and do not warrant
-that making, using, or distributing the project is free from third-party
-rights. See [PATENT_NOTICE.md](PATENT_NOTICE.md), in particular for the
-distinction between private builds and commercial use.
+## Development status
 
 The project has progressed beyond a basic OCR/TTS prototype:
 
@@ -574,3 +573,40 @@ to the Mac afterwards and only then place them in the relevant
 - [docs/WIFI_PROFILES.md](docs/WIFI_PROFILES.md)
 - [docs/REMOTE_MAINTENANCE_EMAIL.md](docs/REMOTE_MAINTENANCE_EMAIL.md)
 - [hardware/README.md](hardware/README.md)
+
+## Licence
+
+The Accessible Book Reader is an open-source and open-hardware project with
+strong copyleft. Different kinds of project material use a clearly separated
+multi-licence model:
+
+- original software and firmware: `GPL-3.0-or-later`
+- original electronics, mechanics, and other hardware designs:
+  `CERN-OHL-S-2.0`
+- documentation and clearly identified original media: `CC-BY-SA-4.0`
+- third-party libraries: their respective original licences
+
+The system messages generated with Google Cloud Text-to-Speech have a
+dedicated [provenance and usage notice](system_audio/messages/README.md).
+
+GPL and CERN-OHL-S permit commercial use, but distribution of derived
+software or hardware requires the corresponding complete source material to
+be made available under the applicable copyleft terms. There is no general
+exception for closed commercial derivatives.
+
+The binding scope, third-party exceptions, and exclusions are documented in
+[LICENSE.md](LICENSE.md). Full licence texts are stored in [`LICENSES/`](LICENSES/),
+and bundled third-party components are documented in
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). Contributions are governed
+by [CONTRIBUTING.md](CONTRIBUTING.md) and the
+[Contributor License Agreement](CLA.md). Contributors retain ownership while
+granting the project owner the additional right to offer parallel commercial
+licences for future business cooperation. Any cooperation that departs from
+the public licences requires a separate development and licence agreement
+with the relevant rights holders.
+
+No patent or freedom-to-operate search has been performed. The licences can
+grant only rights controlled by the respective licensor and do not warrant
+that making, using, or distributing the project is free from third-party
+rights. See [PATENT_NOTICE.md](PATENT_NOTICE.md), in particular for the
+distinction between private builds and commercial use.

@@ -269,6 +269,8 @@ def test_page_ingestor_normalizes_uppercase_heading_only_in_speak_text(tmp_path:
 
 @pytest.mark.parametrize(("source", "spoken"), [
     ("Dr. Müller ging zur Notre-Dame.", "Doktor Müller ging zur Notre Damm."),
+    ("Sie ging ins Teater.", "Sie ging ins Theater."),
+    ("Das Teaterstück läuft im Theater.", "Das Teaterstück läuft im Theater."),
     ("K. nahm z.B. einen Hut.", "K nahm zum Beispiel einen Hut."),
 ])
 def test_page_ingestor_applies_german_pronunciation_substitutions_only_in_speak_text(

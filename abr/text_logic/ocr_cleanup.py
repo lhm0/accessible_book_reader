@@ -13,6 +13,7 @@ class OCRTextPostProcessor:
     _GERMAN_EXAMPLE_ABBREVIATION_RE = re.compile(r"(?<!\w)z\.\s*B\.(?!\w)")
     _SINGLE_LETTER_PERIOD_RE = re.compile(r"(?<![\w.])([^\W\d_])\.(?=\s)")
     _GERMAN_NOTRE_DAME_RE = re.compile(r"(?<![\w-])Notre-Dame(?![\w-])")
+    _GERMAN_TEATER_RE = re.compile(r"\bTeater\b")
 
     def build_paragraph_text(self, line_texts: list[str]) -> str:
         merged = self._merge_line_break_hyphenation(line_texts)
@@ -43,7 +44,8 @@ class OCRTextPostProcessor:
         """Apply German-only pronunciation substitutions for TTS."""
 
         expanded = self.expand_german_spoken_abbreviations(text)
-        return self._GERMAN_NOTRE_DAME_RE.sub("Notre Damm", expanded)
+        expanded = self._GERMAN_NOTRE_DAME_RE.sub("Notre Damm", expanded)
+        return self._GERMAN_TEATER_RE.sub("Theater", expanded)
 
     @staticmethod
     def is_uppercase_heading(text: str) -> bool:

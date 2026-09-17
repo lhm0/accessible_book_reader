@@ -166,6 +166,36 @@ Wichtig zum aktuellen Satzrest-Verhalten:
 - fehlt bei einer frueh ingestierten linken Einzelseite die Seitenzahl, wird
   genau dieser Pending-Speicher fuer den Uebergang zur naechsten Seite genutzt
 
+### Unnummerierte Anfangsdoppelseite nachtraeglich zuordnen
+
+Nach dem Speichern einer vollstaendigen Doppelseite mit aufeinanderfolgenden
+Seitenzahlen prueft der Page Ingestor, ob noch `pages/page_1.json` und
+`pages/page_2.json` ohne Seitenzahlen existieren. Sind beide unmittelbar
+vorhergehenden Seitenplaetze frei, erhalten diese Anfangsseiten die fehlenden
+Nummern. Beispiel: Auf die neu erkannte Doppelseite 7/8 folgt die Korrektur
+`page_1.json` → `0005.json` und `page_2.json` → `0006.json`; die internen
+Kennungen werden `page_0005` und `page_0006`.
+
+Die Platzhalter muessen links/rechts zu derselben frueheren Aufnahme gehoeren.
+Einzelseiten, nicht fortlaufende Nummern, bereits nummerierte Platzhalter oder
+ein belegter Zielplatz loesen keine Korrektur aus. Es wird keine vorhandene
+nummerierte Seite ueberschrieben. Die Korrektur wird beim Ingest ausgefuehrt,
+nicht allein beim Starten des Dienstes.
+
+Aktualisiert werden Scan-Manifeste, Kapitel-Seitenlisten und -Nummernbereiche,
+Kapitelgrenzen einschliesslich `next_start_boundary`, der gespeicherte
+Abschnittsstand sowie strukturierte Seitenreferenzen in Zustands- und
+Zusammenfassungsdateien. Seitenbereiche vorhandener Kapitelzusammenfassungen
+werden angepasst; die Zusammenfassungstexte werden dabei nicht neu erzeugt.
+Originale OCR-Reports, `metadata.report_page_id`, Scan-Identitaet und Seitentexte
+bleiben erhalten. Ein Satzrest der nachnummerierten rechten Seite wird bei
+Bedarf in den aktuellen Vorlesetext uebernommen.
+
+Die reparierten Seiten tragen `metadata.page_number_inferred=true`,
+`page_number_inference="following_spread"` und die ausloesende Scan-ID unter
+`page_number_inference_scan_id`. Im Dienstlog erscheint
+`Vorherige Doppelseite nachnummeriert: left:5, right:6; gespeicherte Referenzen aktualisiert.`
+
 ## Was Jetzt Neu Hinzugekommen Ist
 
 - Abschnitte werden nach jedem Ingest aus vorhandenen `PageRecord`s gebildet

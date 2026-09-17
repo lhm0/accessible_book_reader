@@ -9,6 +9,7 @@ from threading import Event, Thread
 from typing import Any, Callable
 
 from abr.book.models import PageChapterMarker, PageRecord, ScanRecord
+from abr.book.page_number_repair import repair_previous_spread
 from abr.book.store import BookStore, normalize_tag_id, page_lookup_key, utc_now
 from abr.language_config import LanguageProfile, get_language_profile
 from abr.text_logic import OCRTextPostProcessor
@@ -49,6 +50,7 @@ class PageIngestResult:
     pages: tuple[PageRecord, ...]
     scan_manifest_path: Path
     saved_page_paths: tuple[Path, ...]
+    repaired_pages: tuple[PageRecord, ...] = ()
 
 
 @dataclass
@@ -155,6 +157,16 @@ class PageIngestor:
         for placeholder_path in superseded_placeholder_paths:
             if placeholder_path not in saved_page_paths:
                 placeholder_path.unlink(missing_ok=True)
+        repaired_pages = repair_previous_spread(self.store, normalized_tag_id, pages)
+        if repaired_pages:
+            # The predecessor was unavailable during the first carryover pass.
+            pages = _apply_cross_page_tail_fragments(self.store, normalized_tag_id, pages)
+            saved_page_paths = tuple(self.store.save_page(normalized_tag_id, page) for page in pages)
+            _debug_page_ingestor(
+                "previous-spread-number-repair",
+                page_ids=[page.page_id for page in repaired_pages],
+                page_numbers=[page.page_number for page in repaired_pages],
+            )
         _persist_pending_right_tail_fragment(self.store, normalized_tag_id, pages)
         return PageIngestResult(
             tag_id=normalized_tag_id,
@@ -162,6 +174,7 @@ class PageIngestor:
             pages=pages,
             scan_manifest_path=scan_manifest_path,
             saved_page_paths=saved_page_paths,
+            repaired_pages=repaired_pages,
         )
 
 
@@ -247,6 +260,12 @@ class PageIngestService:
                     created_at=request.created_at,
                 )
                 page_labels = ", ".join(_format_page_label(page) for page in result.pages)
+                if result.repaired_pages:
+                    self._emit_status(
+                        "Vorherige Doppelseite nachnummeriert: "
+                        + ", ".join(_format_page_label(page) for page in result.repaired_pages)
+                        + "; gespeicherte Referenzen aktualisiert."
+                    )
                 self._emit_status(
                     f"page-ingest abgeschlossen: {result.scan_record.scan_id} -> {len(result.pages)} Seiten gespeichert ({page_labels})."
                 )

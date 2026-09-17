@@ -156,6 +156,31 @@ Current sentence-fragment behaviour:
 - if an early-ingested single left page has no page number, this pending state
   is used for the transition to the next page
 
+### Recovering an unnumbered opening spread
+
+After storing a complete spread with consecutive page numbers, the ingestor
+checks for both unnumbered `pages/page_1.json` and `pages/page_2.json`. If both
+immediately preceding page slots are free, these placeholders receive those
+numbers. For example, ingesting pages 7/8 renames the placeholders to
+`0005.json` / `0006.json`, with internal IDs `page_0005` / `page_0006`.
+
+The placeholders must be the left/right pages of the same earlier scan.
+Single-page reports, nonconsecutive numbers, already numbered placeholders,
+or either occupied destination prevent repair. Existing numbered pages are
+never overwritten. Repair runs during ingest, not just on service startup.
+
+The correction updates scan manifests, chapter page lists and ranges, chapter
+boundaries including `next_start_boundary`, assembler state, and structured
+page references in state and summary files. Chapter summary ranges are updated;
+summary prose is not regenerated. Source OCR reports, `metadata.report_page_id`,
+scan identity and page text are preserved. A tail fragment from the repaired
+right page is carried into the current spoken text when applicable.
+
+Repaired pages have `metadata.page_number_inferred=true`,
+`page_number_inference="following_spread"`, and the triggering scan ID in
+`page_number_inference_scan_id`. The service logs
+`Vorherige Doppelseite nachnummeriert: left:5, right:6; gespeicherte Referenzen aktualisiert.`
+
 ## Section and summary layer
 
 - sections are assembled from existing `PageRecord` objects after every ingest

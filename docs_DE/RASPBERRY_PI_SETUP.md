@@ -399,10 +399,10 @@ Autoconnect persistent für alle gespeicherten Profile konfigurieren:
 sudo deploy/install_wifi_autoconnect.sh
 ```
 
-Wichtig: Der aktuelle Installer installiert **keinen** dauerhaften
-`abr-wifi-autoconnect.service`. Er entfernt eine alte Unit gegebenenfalls und
-führt die persistente NetworkManager-Konfiguration einmal mit Root-Rechten
-aus. Dadurch wird der frühere Fehler `Insufficient privileges` vermieden.
+Der Installer richtet `abr-wifi-autoconnect.service` als dauerhaften
+Root-Dienst ein. Bei fehlender WLAN-Verbindung versucht er gespeicherte
+Profile reihum und wiederholt die Suche unbegrenzt. Bestehende Verbindungen
+bleiben erhalten. Den Installer auch bei einem Update erneut ausfuehren.
 
 Details stehen derzeit in der deutschen
 [WIFI_PROFILES.md](WIFI_PROFILES.md).

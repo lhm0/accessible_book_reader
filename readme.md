@@ -276,7 +276,7 @@ with `sudo abr-language de` or `sudo abr-language en`. See
 Optional features:
 
 ```bash
-# Configure persistent autoconnect for saved NetworkManager Wi-Fi profiles
+# Install continuous recovery across saved Wi-Fi profiles
 sudo deploy/install_wifi_autoconnect.sh
 
 # First run: create mail.ini; edit it, then run the installer again

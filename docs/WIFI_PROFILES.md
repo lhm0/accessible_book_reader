@@ -42,9 +42,9 @@ sudo .venv/bin/python -m abr.wifi_profiles configure
 ```
 
 This sets `connection.autoconnect=yes` and
-`connection.autoconnect-retries=0`. At boot and after connection loss,
-NetworkManager then keeps trying to use one of the stored networks that is
-currently reachable.
+`connection.autoconnect-retries=1` so one broken profile does not monopolize
+automatic activation. Install the recovery service below for continuous
+retries across saved profiles; `configure` alone does not install it.
 
 ## Checking Profile Name and SSID
 
@@ -61,10 +61,10 @@ NetworkManager displays the SSID of a specific profile:
 nmcli -g 802-11-wireless.ssid connection show "Example WiFi"
 ```
 
-Display every profile with its SSID:
+List profile names and types (query each SSID separately as above):
 
 ```bash
-nmcli -f NAME,TYPE,802-11-wireless.ssid connection show
+nmcli -f NAME,TYPE connection show
 ```
 
 For `switch`, copy the profile name from `abr.wifi_profiles list` exactly.
@@ -83,10 +83,10 @@ immediately:
 sudo .venv/bin/python -m abr.wifi_profiles auto
 ```
 
-Within a detected SSH session, `add`, `switch`, and `auto` are rejected by
-default. Running them directly on the Pi with a keyboard and monitor is
-safest. To deliberately sacrifice the current SSH connection, place the
-override before the subcommand:
+Within a detected SSH session, `switch`, `auto`, `watch`, and `add --activate`
+are rejected by default. Plain `add` remains allowed. Install and check the
+recovery service below before switching without a keyboard and monitor.
+To allow the switch over SSH, place the override before the subcommand:
 
 ```bash
 sudo .venv/bin/python -m abr.wifi_profiles --allow-ssh-disconnect switch Mobile
@@ -94,7 +94,7 @@ sudo .venv/bin/python -m abr.wifi_profiles --allow-ssh-disconnect switch Mobile
 
 The ABR runtime continues independently of SSH as a systemd service.
 
-If no keyboard or monitor is connected to the Pi, use this verified sequence:
+If no keyboard or monitor is connected to the Pi, use this sequence with the recovery service installed:
 
 1. Save the new profile over SSH using `add`; the active connection remains
    unchanged.
@@ -114,29 +114,101 @@ sudo .venv/bin/python -m abr.wifi_profiles add Home MyWiFi --priority 20
 sudo .venv/bin/python -m abr.wifi_profiles add Mobile MyHotspot --priority 10
 ```
 
-## Persistent Autoconnect Configuration
+## Continuous Recovery Service
 
-NetworkManager stores autoconnect properties directly in its connection
-profiles and applies them at every boot. The installer sets these properties
-once using the privileges already granted through `sudo`:
+Install once, including on devices using the previous configuration:
 
 ```bash
 cd ~/src/abr
 sudo deploy/install_wifi_autoconnect.sh
 ```
 
-Verify:
+This configures profiles and installs/starts `abr-wifi-autoconnect.service`.
+It runs as root to activate system profiles without an interactive permission
+agent, starts at boot, and is independent of SSH and the reader service.
+
+It checks `wlan0`, waiting ten seconds between iterations; scans and
+activation attempts can extend each iteration. An established Wi-Fi connection is left
+alone, including networks without Internet access. When disconnected, it
+requests a scan and tries saved profiles in stable UUID order, cycling forever.
+A failed profile does not prevent later profiles from being tried. NetworkManager's
+own automatic selection still uses configured priorities. New/deleted profiles
+are picked up automatically, and unknown open networks are never created.
+
+Each activation command waits up to 45 seconds. Existing/manual activation
+attempts get up to 120 seconds before recovery tries the next profile; an
+nmcli timeout does not necessarily cancel activation inside NetworkManager.
+Recovery resumes after failed manual switches and subsequent connection loss.
+NetworkManager errors are retried, and systemd restarts the monitor if it exits.
+
+An enabled, managed Wi-Fi adapter and a reachable saved network with valid
+credentials are required. Missing/blocked adapters are checked repeatedly;
+radio and management restrictions are not overridden. This checks the Wi-Fi
+connection, not Internet availability.
 
 ```bash
-sudo .venv/bin/python -m abr.wifi_profiles list
-nmcli connection show
-nmcli device status
+sudo systemctl status abr-wifi-autoconnect.service --no-pager
+sudo journalctl -u abr-wifi-autoconnect.service -n 30 -f
 ```
 
-The installer neither activates a connection nor switches Wi-Fi; it changes
-only the persistent autoconnect properties of existing profiles. An earlier
-version installed `abr-wifi-autoconnect.service`. That unit failed without
-root privileges and would have been unnecessarily privileged if run as root.
-The current installer disables and removes it during an update. Profiles
-created later by external tools can be included by rerunning the installer or
-`abr.wifi_profiles configure`.
+On-device validation: turn the hotspot off and back on, and verify reconnection
+without SSH intervention. Also test a failing saved profile alongside a working
+one. Automated tests simulate these cases; actual radio and DHCP behavior still
+requires a Raspberry Pi test.
+
+## Updating an Existing Installation
+
+After transferring the updated code to the Pi, rerun the installer. A Git
+update alone does not install/update the systemd unit. The installer restarts
+the monitor, which preserves an established connection. The control-panel
+service does not need to be stopped.
+
+```bash
+cd ~/src/abr
+sudo deploy/install_wifi_autoconnect.sh
+systemctl is-enabled abr-wifi-autoconnect.service
+systemctl is-active abr-wifi-autoconnect.service
+```
+
+Expect `enabled` and `active`. `--allow-ssh-disconnect` neither installs a
+service nor implements rollback; continued recovery requires the installed
+monitor.
+
+## Diagnostics
+
+```bash
+nmcli device status
+nmcli radio wifi
+sudo .venv/bin/python -m abr.wifi_profiles list
+sudo journalctl -u abr-wifi-autoconnect.service -b -n 100 --no-pager
+sudo journalctl -u NetworkManager.service -b -n 100 --no-pager
+```
+
+| Log / status | Meaning / next step |
+|---|---|
+| `Keine gespeicherten WLAN-Profile` | Save at least one profile using `add`. |
+| `WLAN-Geraet nicht bereit` | Check the adapter, radio state and NetworkManager management. |
+| `WLAN-Verbindung fehlgeschlagen` | Check SSID, password and range; other profiles will still be tried. |
+| `WLAN verbunden` | Wi-Fi is connected. Lack of Internet alone does not trigger switching. |
+| Service `inactive` / `failed` | Read the service log and rerun the installer. |
+
+A full pass through several profiles can take several minutes. If no saved
+network is reachable, the Pi remains offline and continues trying. To regain
+SSH access, the Mac must be able to reach the connected network using
+`abr.local` or the current IP address.
+
+## Headless Device Test
+
+1. Install the monitor and verify `enabled` / `active`.
+2. Save two reachable networks with valid credentials.
+3. Turn off the connected network; verify automatic connection to the other.
+   Move the Mac to that network if necessary for SSH.
+4. Turn off both networks, wait, then enable one again; verify reconnection
+   even after multiple unsuccessful search rounds.
+5. Repeat to verify recovery after subsequent connection loss.
+6. Optionally activate a separate test profile with an incorrect password;
+   a reachable valid profile must still be tried afterwards.
+7. Reboot and verify automatic startup of the monitor and Wi-Fi connection.
+
+As of 2026-09-17, 24 automated Wi-Fi tests pass. The new monitor has not yet
+been validated on actual Raspberry Pi hardware.

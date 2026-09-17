@@ -5,7 +5,8 @@ from dataclasses import dataclass
 import getpass
 import os
 import subprocess
-from typing import Protocol, Sequence
+import time
+from typing import Callable, Protocol, Sequence
 
 
 WIFI_CONNECTION_TYPES = {"802-11-wireless", "wifi"}
@@ -16,7 +17,7 @@ class CommandRunner(Protocol):
 
 
 def _run_command(command: Sequence[str], *, check: bool = True) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(command, check=check, text=True, capture_output=True)
+    return subprocess.run(command, check=check, text=True, capture_output=True, timeout=120)
 
 
 @dataclass(frozen=True)
@@ -82,6 +83,7 @@ class WifiProfileManager:
         return profiles
 
     def configure_autoconnect(self, profile: str) -> None:
+        # Retry across profiles in the monitor, rather than forever on one profile.
         self._runner(
             [
                 "nmcli",
@@ -91,7 +93,7 @@ class WifiProfileManager:
                 "connection.autoconnect",
                 "yes",
                 "connection.autoconnect-retries",
-                "0",
+                "1",
             ]
         )
 
@@ -152,8 +154,85 @@ class WifiProfileManager:
 
     def automatic(self) -> list[WifiProfile]:
         profiles = self.configure_all()
-        self._runner(["nmcli", "device", "connect", self.interface])
+        # Unlike device connect, connection up never creates an unknown profile.
+        self._runner(["nmcli", "connection", "up", "ifname", self.interface])
         return profiles
+
+
+class WifiReconnectMonitor:
+    """Retry saved profiles fairly, independently of an interactive SSH session."""
+
+    def __init__(
+        self, manager: WifiProfileManager, *,
+        status: Callable[[str], None] = print,
+        clock: Callable[[], float] = time.monotonic,
+    ) -> None:
+        self.manager = manager
+        self.status = status
+        self.clock = clock
+        self._last_attempt: str | None = None
+        self._offline_since: float | None = None
+
+    def _state(self) -> int:
+        result = self.manager._runner([
+            "nmcli", "-g", "GENERAL.STATE", "device", "show", self.manager.interface,
+        ])
+        return int(result.stdout.strip().split()[0])
+
+    def step(self) -> None:
+        state = self._state()
+        if state == 100:  # NM_DEVICE_STATE_ACTIVATED, including LAN without Internet
+            if self._offline_since is not None:
+                self.status("WLAN verbunden; automatische Suche pausiert.")
+            self._offline_since = None
+            return
+        now = self.clock()
+        if self._offline_since is None:
+            self._offline_since = now
+        # Give NetworkManager/manual switches time to finish, but do not let
+        # repeated automatic activation of one broken profile starve the others.
+        if 40 <= state <= 110 and now - self._offline_since < 120:
+            return
+        if state < 30:  # unavailable/unmanaged, e.g. missing adapter or rfkill
+            self.status("WLAN-Geraet nicht bereit; erneute Pruefung folgt.")
+            return
+        profiles = sorted(self.manager.profiles(), key=lambda profile: profile.uuid)
+        if not profiles:
+            self.status("Keine gespeicherten WLAN-Profile; Suche wird wiederholt.")
+            return
+        uuids = [profile.uuid for profile in profiles]
+        index = (uuids.index(self._last_attempt) + 1) % len(uuids) if self._last_attempt in uuids else 0
+        profile = profiles[index]
+        self.manager._runner([
+            "nmcli", "--wait", "10", "device", "wifi", "rescan", "ifname", self.manager.interface,
+        ], check=False)
+        # A connection may have succeeded during scanning. Never replace it.
+        scanned_state = self._state()
+        if scanned_state == 100:
+            return
+        if 40 <= scanned_state <= 110 and self.clock() - self._offline_since < 120:
+            return
+        self._last_attempt = profile.uuid
+        self._offline_since = now
+        self.status(f"WLAN-Suche: versuche gespeichertes Profil {profile.name!r}.")
+        result = self.manager._runner([
+            "nmcli", "--wait", "45", "connection", "up", "uuid", profile.uuid,
+            "ifname", self.manager.interface,
+        ], check=False)
+        if result.returncode:
+            self.status(f"WLAN-Verbindung fehlgeschlagen: {result.stderr.strip()}; weitere Profile folgen.")
+        else:
+            self.status(f"WLAN verbunden mit {profile.name!r}.")
+
+    def run(self, *, sleep: Callable[[float], None] = time.sleep) -> None:
+        self.status("Dauerhafte WLAN-Suche gestartet.")
+        while True:
+            try:
+                self.step()
+            except (subprocess.SubprocessError, OSError, ValueError) as exc:
+                # Do not print subprocess command arguments (may contain secrets).
+                self.status(f"WLAN-Pruefung fehlgeschlagen ({type(exc).__name__}); neuer Versuch folgt.")
+            sleep(10)
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -184,6 +263,7 @@ def _build_parser() -> argparse.ArgumentParser:
 
     subparsers.add_parser("configure", help="Autoconnect fuer alle gespeicherten WLANs einschalten")
     subparsers.add_parser("auto", help="Alle Profile konfigurieren und automatische Auswahl anstossen")
+    subparsers.add_parser("watch", help="Bei Verbindungsverlust dauerhaft gespeicherte WLANs versuchen")
     return parser
 
 
@@ -192,7 +272,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parser.parse_args(argv)
     manager = WifiProfileManager(interface=args.interface)
     try:
-        disruptive_command = args.command in {"switch", "auto"} or (
+        disruptive_command = args.command in {"switch", "auto", "watch"} or (
             args.command == "add" and args.activate
         )
         if (
@@ -226,10 +306,14 @@ def main(argv: Sequence[str] | None = None) -> int:
         elif args.command == "auto":
             profiles = manager.automatic()
             print(f"Automatische Auswahl aus {len(profiles)} WLAN-Profil(en) angestossen.")
+        elif args.command == "watch":
+            WifiReconnectMonitor(manager, status=lambda message: print(message, flush=True)).run()
     except FileNotFoundError:
         parser.error("nmcli wurde nicht gefunden; NetworkManager muss installiert sein.")
     except ValueError as exc:
         parser.error(str(exc))
+    except subprocess.TimeoutExpired:
+        parser.error("Zeitlimit beim NetworkManager-Aufruf erreicht.")
     except subprocess.CalledProcessError as exc:
         detail = (exc.stderr or exc.stdout or str(exc)).strip()
         parser.error(f"NetworkManager-Aufruf fehlgeschlagen: {detail}")

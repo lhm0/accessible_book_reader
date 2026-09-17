@@ -299,7 +299,7 @@ Details stehen in [docs/LANGUAGE_PROFILES.md](docs/LANGUAGE_PROFILES.md).
 Weitere Funktionen sind optional:
 
 ```bash
-# Gespeicherte NetworkManager-WLAN-Profile beim Boot vorbereiten
+# Dauerhafte WLAN-Suche bei Verbindungsverlust installieren
 sudo deploy/install_wifi_autoconnect.sh
 
 # Beim ersten Lauf mail.ini anlegen, dann ausfuellen und erneut aufrufen

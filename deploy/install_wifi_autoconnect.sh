@@ -14,16 +14,30 @@ if [ ! -x "$python" ]; then
     exit 1
 fi
 
-# Aeltere Installationen verwendeten hier eine systemd-Unit als normaler
-# Benutzer. NetworkManager verweigert diesem nicht-interaktiven Prozess das
-# Aendern systemweiter Profile. Die Einstellungen sind persistent, daher ist
-# kein privilegierter ABR-Dienst bei jedem Boot erforderlich.
-if [ -e "$target" ]; then
-    systemctl disable --now abr-wifi-autoconnect.service 2>/dev/null || true
-    rm -f "$target"
-    systemctl daemon-reload
-    systemctl reset-failed abr-wifi-autoconnect.service 2>/dev/null || true
-fi
-
+command -v nmcli >/dev/null
 "$python" -m abr.wifi_profiles configure
-echo "WLAN-Autoconnect ist in den gespeicherten NetworkManager-Profilen konfiguriert."
+
+cat > "$target" <<EOF
+[Unit]
+Description=ABR persistent Wi-Fi recovery
+Wants=NetworkManager.service
+After=NetworkManager.service
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=$repo_dir
+Environment=PYTHONUNBUFFERED=1
+ExecStart="$python" -m abr.wifi_profiles watch
+Restart=always
+RestartSec=10
+TimeoutStopSec=5
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+systemctl daemon-reload
+systemctl enable abr-wifi-autoconnect.service
+systemctl restart abr-wifi-autoconnect.service
+echo "Dauerhafte WLAN-Suche aktiviert (abr-wifi-autoconnect.service)."

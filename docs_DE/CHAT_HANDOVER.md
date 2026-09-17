@@ -904,7 +904,7 @@ journalctl -u abr-usage-report.service -n 100 --no-pager
 Implementiert in
 [abr/wifi_profiles.py](../abr/wifi_profiles.py).
 
-Aktueller, am Pi bestaetigter Stand:
+Aktueller Implementierungsstand (2026-09-17; neuer Suchdienst noch ohne Pi-Praxistest):
 
 - vorhandene NetworkManager-Profile werden weiterverwendet
 - neue WPA/WPA2-Profile werden per `add` mit interaktiver Passwortabfrage
@@ -913,15 +913,18 @@ Aktueller, am Pi bestaetigter Stand:
   ueber die laufende SSH-Verbindung angelegt werden kann
 - `switch` aktiviert gezielt einen Profilnamen oder eine UUID
 - `configure` setzt fuer alle WLAN-Profile `connection.autoconnect=yes` und
-  `connection.autoconnect-retries=0`
-- der fruehere `abr-wifi-autoconnect.service` scheiterte als normaler
-  Dienstbenutzer reproduzierbar mit `Insufficient privileges`; er wird nicht
-  als Root-Dienst weitergefuehrt
-- `install_wifi_autoconnect.sh` setzt die persistenten Eigenschaften einmalig
-  mit den ohnehin durch `sudo` erteilten Rechten und entfernt die alte Unit;
-  NetworkManager uebernimmt danach selbst das Verhalten bei jedem Boot
-- NetworkManager waehlt dadurch beim Boot oder nach Verbindungsverlust ein
-  erreichbares gespeichertes Netz
+  `connection.autoconnect-retries=1`
+- `WifiReconnectMonitor` / `watch` versucht bei fehlender Verbindung gespeicherte
+  Profile in stabiler UUID-Reihenfolge, unbegrenzt ueber alle Profile hinweg
+- zehn Sekunden Wartezeit zwischen Prueflaeufen; nmcli-Aktivierung wartet bis
+  45 Sekunden; laufende Aktivierungen erhalten bis zu 120 Sekunden Zeit
+- bestehende WLAN-Verbindungen bleiben erhalten, auch ohne Internetzugang
+- `install_wifi_autoconnect.sh` installiert jetzt einen dauerhaften Root-Dienst
+  `abr-wifi-autoconnect.service`; er startet beim Boot und unabhaengig von SSH
+- fuer bestehende Installationen muss der Installer nach dem Code-Update erneut
+  ausgefuehrt werden; `configure` allein installiert den Suchdienst nicht
+- 24 WLAN-Tests bestanden (Fehler, Profilwechsel, spaeter verfuegbare Netze und
+  wiederholter Verbindungsverlust); Funk-/DHCP-Test auf dem Pi steht noch aus
 - disruptive Befehle erfordern in einer erkannten SSH-Sitzung die bewusste
   Option `--allow-ssh-disconnect`
 - der Wechsel zwischen einem lokalen WLAN-Profil und einem mobilen Hotspot
@@ -942,7 +945,7 @@ sudo .venv/bin/python -m abr.wifi_profiles \
 nmcli -g 802-11-wireless.ssid connection show "Example WiFi"
 ```
 
-Optionale Boot-Absicherung:
+Installation der dauerhaften WLAN-Wiederherstellung:
 
 - Installer: `deploy/install_wifi_autoconnect.sh`
 - vollstaendige Anleitung:

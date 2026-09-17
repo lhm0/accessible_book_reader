@@ -125,9 +125,21 @@ class PageIngestor:
             _finalize_page_record(draft, language_profile=self.language_profile)
             for draft in drafts
         )
+        if len(pages) == 2:
+            left = next((page for page in pages if page.side == "left"), None)
+            right = next((page for page in pages if page.side == "right"), None)
+            sequence_valid = (
+                left is not None and right is not None and left.page_number is not None
+                and left.page_number > 0 and right.page_number == left.page_number + 1
+            )
+            pages = tuple(replace(
+                page, metadata={**page.metadata, "page_number_sequence_valid": sequence_valid},
+            ) for page in pages)
         pages = _normalize_right_page_tail_fragments_for_readout(pages)
         pages = _normalize_single_page_tail_fragment_for_readout(pages)
+        pages_before_cross_tail = pages
         pages = _apply_cross_page_tail_fragments(self.store, normalized_tag_id, pages)
+        cross_tail_applied = pages != pages_before_cross_tail
         pages = _apply_spread_tail_fragment_carryover(pages)
         pages = _apply_spread_hyphenated_word_carryover(pages)
 
@@ -160,7 +172,8 @@ class PageIngestor:
         repaired_pages = repair_previous_spread(self.store, normalized_tag_id, pages)
         if repaired_pages:
             # The predecessor was unavailable during the first carryover pass.
-            pages = _apply_cross_page_tail_fragments(self.store, normalized_tag_id, pages)
+            if not cross_tail_applied:
+                pages = _apply_cross_page_tail_fragments(self.store, normalized_tag_id, pages)
             saved_page_paths = tuple(self.store.save_page(normalized_tag_id, page) for page in pages)
             _debug_page_ingestor(
                 "previous-spread-number-repair",
@@ -429,35 +442,12 @@ def _apply_cross_page_tail_fragments(store: BookStore, tag_id: str, pages: tuple
 
     target_page = updated_pages[target_index]
     if target_page.page_number is None:
-        pending_fragment = _load_pending_right_tail_fragment(store, tag_id)
         _debug_page_ingestor(
-            "cross-tail-pending-check",
+            "cross-tail-skip", reason="unknown_predecessor_without_page_number",
             target_page_id=target_page.page_id,
-            target_side=target_page.side,
-            target_page_number=target_page.page_number,
-            pending_fragment= pending_fragment,
         )
-        if pending_fragment:
-            updated_target_page = replace(
-                target_page,
-                speak_text=_prepend_tail_fragment(pending_fragment, target_page.speak_text),
-            )
-            _debug_page_ingestor(
-                "cross-tail-pending-apply",
-                target_page_id=target_page.page_id,
-                target_side=target_page.side,
-                target_page_number=target_page.page_number,
-                fragment=pending_fragment,
-            )
-            updated_pages[target_index] = updated_target_page
-            return tuple(updated_pages)
-        _debug_page_ingestor(
-            "cross-tail-skip",
-            reason="missing_page_number_and_no_pending_fragment",
-            target_page_id=target_page.page_id,
-            target_side=target_page.side,
-            target_page_number=target_page.page_number,
-        )
+        return pages
+    if target_page.side != "left" or not target_page.metadata.get("page_number_sequence_valid", True):
         return pages
     if target_page.page_number <= 1:
         _debug_page_ingestor(
@@ -470,6 +460,23 @@ def _apply_cross_page_tail_fragments(store: BookStore, tag_id: str, pages: tuple
         return pages
 
     previous_page = store.load_page(tag_id, target_page.page_number - 1)
+    if previous_page is None and len(pages) == 2:
+        right = next((page for page in pages if page.side == "right"), None)
+        if (right is not None and right.page_number == target_page.page_number + 1
+                and right.scan_id == target_page.scan_id):
+            placeholder = store.load_page(tag_id, "page_2")
+            if (placeholder is not None and placeholder.side == "right"
+                    and placeholder.page_number is None
+                    and placeholder.scan_id != target_page.scan_id
+                    and placeholder.tail_fragment):
+                # Explicit fallback for a known current spread only. An unknown
+                # number on the source is expected here, even if its scan was
+                # marked as having an unresolved page-number sequence.
+                updated_pages[target_index] = replace(
+                    target_page,
+                    speak_text=_prepend_tail_fragment(placeholder.tail_fragment, target_page.speak_text),
+                )
+                return tuple(updated_pages)
     _debug_page_ingestor(
         "cross-tail-check",
         target_page_id=target_page.page_id,
@@ -480,7 +487,9 @@ def _apply_cross_page_tail_fragments(store: BookStore, tag_id: str, pages: tuple
         previous_page_side=previous_page.side if previous_page is not None else None,
         previous_page_tail_fragment=previous_page.tail_fragment if previous_page is not None else None,
     )
-    if previous_page is None or previous_page.side != "right" or not previous_page.tail_fragment:
+    if (previous_page is None or previous_page.side != "right" or not previous_page.tail_fragment
+            or previous_page.page_number != target_page.page_number - 1
+            or not previous_page.metadata.get("page_number_sequence_valid", True)):
         _debug_page_ingestor(
             "cross-tail-skip",
             reason=(
@@ -739,17 +748,6 @@ def _persist_pending_right_tail_fragment(store: BookStore, tag_id: str, pages: t
         tail_fragment=right_page.tail_fragment,
         state="set" if right_page.tail_fragment else "cleared",
     )
-
-
-def _load_pending_right_tail_fragment(store: BookStore, tag_id: str) -> str | None:
-    payload = store.load_runtime_state(tag_id, _PENDING_RIGHT_TAIL_STATE_FILENAME)
-    if payload is None:
-        return None
-    fragment = payload.get("tail_fragment")
-    if fragment is None:
-        return None
-    normalized = str(fragment).strip()
-    return normalized or None
 
 
 def _extract_text_lines(page_payload: dict[str, Any]) -> list[dict[str, Any]]:

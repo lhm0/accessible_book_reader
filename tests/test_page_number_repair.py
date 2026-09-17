@@ -16,7 +16,8 @@ def setup_book(tmp_path):
     old = tuple(PageRecord(
         page_id=f'page_{i}', scan_id='old', created_at='2026-09-01T12:00:00Z',
         side=side, clean_text='' if i == 1 else 'Anfang.', speak_text='' if i == 1 else 'Anfang.',
-        metadata={'report_page_id': f'page_{i}', 'language': 'de'},
+        metadata={'report_page_id': f'page_{i}', 'language': 'de',
+                  'page_number_sequence_valid': False},
     ) for i, side in enumerate(('left', 'right'), 1))
     for page in old:
         store.save_page('book', page)

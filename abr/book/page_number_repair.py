@@ -39,6 +39,7 @@ def repair_previous_spread(
     repaired = tuple(replace(
         page, page_id=f"page_{number:04d}", page_number=number,
         metadata={**page.metadata, "page_number_inferred": True,
+                  "page_number_sequence_valid": True,
                   "page_number_inference": "following_spread",
                   "page_number_inference_scan_id": left.scan_id},
     ) for page, number in zip((first, second), numbers))

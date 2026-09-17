@@ -153,8 +153,27 @@ Current sentence-fragment behaviour:
 
 - the right-page tail fragment is also kept in
   `library/<TAG_ID>/state/pending_right_tail_fragment.json`
-- if an early-ingested single left page has no page number, this pending state
-  is used for the transition to the next page
+- without a page number, no fragment from an earlier scan is prepended;
+  pending state is never a substitute for a known predecessor
+- inconsistent numbering in a complete spread also blocks carryover and is
+  persisted as `metadata.page_number_sequence_valid=false`, preventing those
+  pages from becoming fragment sources for later scans
+- known numbering gives priority to the stored right page with the
+  exact preceding number. Successfully renumbered opening pages qualify again
+- if the numbered predecessor is entirely absent, a complete, consecutively
+  numbered spread may use the fragment from `pages/page_2.json`, provided it
+  is an unnumbered right page from another scan. An existing predecessor with
+  no fragment does not trigger this fallback. Single-page reports and unclear
+  current numbering cannot use it either
+- during incremental processing, playback of the numbered left page waits
+  for the right page in this special case. Both pages are then played after
+  checking the full spread; inconsistent numbering omits the external fragment
+- if that placeholder is subsequently renumbered automatically, its fragment
+  is not prepended a second time
+- left-to-right carryover within the same capture remains intact because
+  physical adjacency is known even without page numbers
+- plausible but factually wrong OCR numbers cannot be identified by this
+  numbering check alone. Existing stored spoken text is not cleaned retroactively
 
 ### Recovering an unnumbered opening spread
 

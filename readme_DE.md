@@ -163,8 +163,32 @@ Wichtig zum aktuellen Satzrest-Verhalten:
 
 - der Satzrest einer rechten Seite wird zusaetzlich unter
   `library/<TAG_ID>/state/pending_right_tail_fragment.json` gehalten
-- fehlt bei einer frueh ingestierten linken Einzelseite die Seitenzahl, wird
-  genau dieser Pending-Speicher fuer den Uebergang zur naechsten Seite genutzt
+- fehlt die Seitenzahl, wird kein Satzrest aus einer frueheren Aufnahme
+  uebernommen; der Pending-Speicher wird nicht als Ersatz fuer eine bekannte
+  Vorgaengerseite verwendet
+- widerspruechliche Seitenzahlen einer vollstaendigen Doppelseite sperren die
+  Uebernahme ebenfalls. Dies wird als `metadata.page_number_sequence_valid=false`
+  gespeichert, damit deren Satzreste auch spaeter nicht als Quelle dienen
+- bei bekannter Zuordnung hat der Satzrest der gespeicherten rechten
+  Seite mit exakt der vorhergehenden Nummer Vorrang. Nachnummerierte
+  Anfangsseiten koennen nach erfolgreicher Korrektur wieder als Quelle dienen
+- fehlt die nummerierte Vorgaengerseite ganz, darf bei einer vollstaendigen,
+  fortlaufend nummerierten Doppelseite der Satzrest aus `pages/page_2.json`
+  verwendet werden. Dieser Platzhalter muss eine unnummerierte rechte Seite
+  einer anderen Aufnahme sein. Eine vorhandene Vorgaengerseite ohne Satzrest
+  loest diesen Fallback nicht aus. Einzelne oder unklar nummerierte aktuelle
+  Seiten verwenden ihn ebenfalls nicht
+- bei inkrementeller Verarbeitung wartet die Ausgabe der nummerierten linken
+  Seite in diesem Spezialfall auf die rechte Seite. Erst nach Pruefung der
+  vollstaendigen Doppelseite werden beide Seiten vorgelesen; bei widerspruechlichen
+  Nummern ohne den fremden Satzrest
+- wird dieselbe Platzhalterseite danach automatisch nachnummeriert, wird ihr
+  Satzrest nicht ein zweites Mal vorangestellt
+- innerhalb derselben Aufnahme bleibt die Uebernahme von links nach rechts
+  erhalten: Diese physische Nachbarschaft ist auch ohne Seitenzahlen bekannt
+- eine in sich plausible, aber sachlich falsche OCR-Seitenzahl laesst sich
+  allein durch diesen Nummernvergleich nicht erkennen. Bereits gespeicherte
+  Vorlesetexte werden durch das Update nicht nachtraeglich bereinigt
 
 ### Unnummerierte Anfangsdoppelseite nachtraeglich zuordnen
 

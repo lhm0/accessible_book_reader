@@ -3107,3 +3107,41 @@ def test_camera_assignment_log_data_follows_orientation_swap() -> None:
 
     assert runtime_module._camera_assignment_after_orientation(metadata, "reader2") == ("0", "1")
     assert runtime_module._camera_assignment_after_orientation(metadata, "reader1") == ("1", "0")
+
+
+@pytest.mark.parametrize('right_number', [9, 15])
+def test_runtime_waits_for_full_spread_before_placeholder_fallback(tmp_path, right_number):
+    from abr.book import BookStore, PageIngestor
+    from abr.book.models import PageRecord
+    store = BookStore(tmp_path / 'library')
+    store.ensure_book('fallback')
+    store.save_page('fallback', PageRecord(
+        page_id='page_2', scan_id='old', created_at='2026-09-01T00:00:00Z',
+        side='right', clean_text='Alter Rest', speak_text='', tail_fragment='Alter Rest',
+    ))
+    player = _FakePageAudioPlayer()
+    controller = RuntimeController(
+        monitor=FrontPanelMonitor(gpio=_FakeGPIO()), job_manager=ForegroundJobManager(),
+        page_audio_player=player,
+        page_ingest_config=PageIngestRuntimeConfig(library_root=store.library_root),
+    )
+    ingestor = PageIngestor(store)
+    report = tmp_path / 'report.json'
+    pages = [{'page_id': 'page_1', 'slot': 'left', 'page_number': 8,
+              'ocr_lines': [{'text': 'weiter.'}]}]
+    try:
+        report.write_text(json.dumps({'pages': pages}))
+        partial = ingestor.ingest_report('fallback', report, scan_id='new')
+        controller._handle_page_ingest_result(
+            runtime_module.PageIngestRequest('fallback', report, playback_sides=('left',)), partial)
+        assert player.enqueued == []
+        pages.append({'page_id': 'page_2', 'slot': 'right', 'page_number': right_number,
+                      'ocr_lines': [{'text': 'Ein Ende.'}]})
+        report.write_text(json.dumps({'pages': pages}))
+        complete = ingestor.ingest_report('fallback', report, scan_id='new')
+        controller._handle_page_ingest_result(
+            runtime_module.PageIngestRequest('fallback', report, playback_sides=('right',)), complete)
+        expected_left = 'Alter Rest weiter.' if right_number == 9 else 'weiter.'
+        assert player.enqueued == [[expected_left, 'Ein Ende.']]
+    finally:
+        controller.stop()

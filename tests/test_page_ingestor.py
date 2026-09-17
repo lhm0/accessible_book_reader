@@ -1146,7 +1146,7 @@ def test_page_ingestor_incremental_flow_keeps_right_to_next_left_tail_carryover(
     assert second_result.pages[0].speak_text == "Dann hoerte sie Schritte im Flur und oeffnete vorsichtig die Tuer."
 
 
-def test_page_ingestor_uses_pending_right_tail_for_single_left_page_without_page_number(tmp_path: Path) -> None:
+def test_page_ingestor_ignores_pending_right_tail_for_single_left_page_without_page_number(tmp_path: Path) -> None:
     store = BookStore(tmp_path / "library")
     ingestor = PageIngestor(store)
 
@@ -1219,10 +1219,19 @@ def test_page_ingestor_uses_pending_right_tail_for_single_left_page_without_page
 
     assert second_result.pages[0].page_number is None
     assert second_result.pages[0].metadata["page_number_inferred"] is False
-    assert second_result.pages[0].speak_text == (
-        "Krieg hin oder her, hatten sich innerhalb von Europa doch von jeher die Menschen, "
-        "über das Festland streifend, vermischt die Völker, die Länder, die Sitten und Gebräuche."
-    )
+    assert second_result.pages[0].speak_text == "die Völker, die Länder, die Sitten und Gebräuche."
+
+    # Once the second page establishes the spread's numbering, the known
+    # predecessor can be used again when building the complete report.
+    payload = json.loads(second_left_only_report.read_text(encoding="utf-8"))
+    payload["pages"].append({
+        "page_id": "page_4", "slot": "right", "page_number": 65,
+        "ocr_lines": [{"text": "Der Text geht weiter."}],
+    })
+    second_left_only_report.write_text(json.dumps(payload), encoding="utf-8")
+    complete = ingestor.ingest_report("book50", second_left_only_report)
+    assert complete.pages[0].page_number == 64
+    assert complete.pages[0].speak_text.startswith("Krieg hin oder her,")
 
 
 def test_page_ingestor_clears_pending_right_tail_when_right_page_has_no_fragment(tmp_path: Path) -> None:
@@ -1339,3 +1348,85 @@ def test_page_ingest_service_processes_requests_in_background(tmp_path: Path) ->
 
     assert any("eingeplant" in status for status in statuses)
     assert any("abgeschlossen" in status for status in statuses)
+
+
+@pytest.mark.parametrize('numbers', [(None, None), (8, 15), (8, 7)])
+def test_unresolved_spread_never_uses_previous_scan_tail(tmp_path, numbers):
+    from abr.book.models import PageRecord
+    store = BookStore(tmp_path / 'library')
+    store.ensure_book('safe')
+    store.save_page('safe', PageRecord(
+        page_id='page_0007', scan_id='old', created_at='2026-09-01T00:00:00Z',
+        side='right', page_number=7, clean_text='Fremder Rest', speak_text='',
+        tail_fragment='Fremder Rest',
+    ))
+    store.save_runtime_state('safe', 'pending_right_tail_fragment.json', {
+        'page_id': 'page_0007', 'page_number': 7, 'tail_fragment': 'Fremder Rest',
+    })
+    pages = []
+    for i, (side, number) in enumerate(zip(('left', 'right'), numbers), 1):
+        page = {'page_id': f'page_{i}', 'slot': side,
+                'ocr_lines': [{'text': 'Aktueller Text.'}]}
+        if number is not None:
+            page['page_number'] = number
+        pages.append(page)
+    report = tmp_path / 'report.json'
+    report.write_text(json.dumps({'pages': pages}))
+    result = PageIngestor(store).ingest_report('safe', report, scan_id='new')
+    assert all('Fremder Rest' not in page.speak_text for page in result.pages)
+    assert all(page.metadata['page_number_sequence_valid'] is False for page in result.pages)
+
+
+def test_inconsistent_previous_spread_is_not_a_source_for_later_tail(tmp_path):
+    store = BookStore(tmp_path / 'library')
+    ingestor = PageIngestor(store)
+    report = tmp_path / 'report.json'
+    def ingest(numbers, texts, scan):
+        report.write_text(json.dumps({'pages': [
+            {'page_id': f'page_{i}', 'slot': side, 'page_number': number,
+             'ocr_lines': [{'text': text}]} for i, side, number, text in zip(
+                 (1, 2), ('left', 'right'), numbers, texts)]}))
+        return ingestor.ingest_report('safe', report, scan_id=scan)
+    ingest((2, 9), ('Anfang.', 'und ging weiter'), 'bad')
+    assert store.load_page('safe', 9).tail_fragment == 'und ging weiter'
+    result = ingest((10, 11), ('Aktueller Text.', 'Weiter.'), 'good')
+    assert result.pages[0].speak_text == 'Aktueller Text.'
+
+
+@pytest.mark.parametrize(('numbers', 'existing', 'placeholder', 'expected'), [
+    ((8, 9), None, 'old', 'Alter Rest weiter.'),
+    ((8, 9), 'numbered', 'old', 'Nummerierter Rest weiter.'),
+    ((8, 9), 'empty', 'old', 'weiter.'),
+    ((8, 9), None, None, 'weiter.'),
+    ((8, 9), None, 'empty', 'weiter.'),
+    ((8, 9), None, 'current', 'weiter.'),
+    ((None, None), None, 'old', 'weiter.'),
+    ((8, 15), None, 'old', 'weiter.'),
+    ((8,), None, 'old', 'weiter.'),
+])
+def test_missing_predecessor_uses_placeholder_only_for_valid_complete_spread(
+    tmp_path, numbers, existing, placeholder, expected,
+):
+    from abr.book.models import PageRecord
+    store = BookStore(tmp_path / 'library')
+    store.ensure_book('fallback')
+    def save(page_id, number, scan, fragment):
+        store.save_page('fallback', PageRecord(
+            page_id=page_id, page_number=number, scan_id=scan,
+            created_at='2026-09-01T00:00:00Z', side='right', clean_text='Quelle.',
+            speak_text='Quelle.', tail_fragment=fragment,
+            metadata={'page_number_sequence_valid': number is not None},
+        ))
+    if placeholder:
+        save('page_2', None, 'new' if placeholder == 'current' else 'old',
+             None if placeholder == 'empty' else 'Alter Rest')
+    if existing:
+        save('page_0007', 7, 'numbered', None if existing == 'empty' else 'Nummerierter Rest')
+    pages = [{'page_id': f'page_{i}', 'slot': side, 'ocr_lines': [{'text': text}],
+              **({'page_number': number} if number is not None else {})}
+             for i, side, number, text in zip((1, 2), ('left', 'right'), numbers,
+                                              ('weiter.', 'Ein Ende.'))]
+    report = tmp_path / 'report.json'
+    report.write_text(json.dumps({'pages': pages}))
+    result = PageIngestor(store).ingest_report('fallback', report, scan_id='new')
+    assert result.pages[0].speak_text == expected

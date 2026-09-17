@@ -1071,6 +1071,7 @@ class RuntimeController:
         self._heartbeat_active = False
         self._ignore_page_ingest_results = False
         self._capture_ocr_incremental_ingest_active = False
+        self._deferred_placeholder_scan: tuple[str, str] | None = None
         self._last_played_page_numbers_by_book: dict[str, set[int]] = {}
         self._last_played_scan_id_by_book: dict[str, str] = {}
         self._wrong_direction_confirmation_books: set[str] = set()
@@ -1619,10 +1620,29 @@ class RuntimeController:
                 page_keys,
             )
         if self._ignore_page_ingest_results:
+            self._deferred_placeholder_scan = None
             self._stop_start_wait_heartbeat()
             self._emit_status("page-ingest Ergebnis verworfen: Wartezustand wurde zuvor abgebrochen.")
             return
-        pages_for_audio = _prepare_pages_for_playback(result.pages, request.playback_sides)
+        scan_key = (result.tag_id, result.pages[0].scan_id if result.pages else "")
+        playback_sides = request.playback_sides
+        if playback_sides == ("left",) and len(result.pages) == 1:
+            self._deferred_placeholder_scan = None
+            left = result.pages[0]
+            if left.side == "left" and left.page_number is not None and left.page_number > 1:
+                store = BookStore(self.page_ingest_config.library_root)
+                previous = store.load_page(result.tag_id, left.page_number - 1)
+                placeholder = store.load_page(result.tag_id, "page_2")
+                if (previous is None and placeholder is not None and placeholder.side == "right"
+                        and placeholder.page_number is None and placeholder.tail_fragment
+                        and placeholder.scan_id != left.scan_id):
+                    self._deferred_placeholder_scan = scan_key
+                    self._emit_status("Seitenausgabe wartet auf rechte Seite zur Pruefung des page_2-Satzrests.")
+                    return
+        if self._deferred_placeholder_scan == scan_key and len(result.pages) == 2:
+            playback_sides = ("left", "right")
+            self._deferred_placeholder_scan = None
+        pages_for_audio = _prepare_pages_for_playback(result.pages, playback_sides)
         if not any(page.speak_text.strip() for page in pages_for_audio):
             if self._is_start_wait_heartbeat_active():
                 self.work_state = WorkState.ERROR
@@ -1720,6 +1740,7 @@ class RuntimeController:
         return True
 
     def _handle_page_ingest_failure(self, _request: PageIngestRequest, _exc: BaseException) -> None:
+        self._deferred_placeholder_scan = None
         self._stop_start_wait_heartbeat()
 
     def _handle_page_audio_ready(self, _page_label: str) -> None:

@@ -583,7 +583,15 @@ Aktuell besonders wichtig fuer die Audioausgabe:
 - der Satzrest einer rechten Seite wird zusaetzlich unter
   `state/pending_right_tail_fragment.json` gehalten
 - fehlt bei einer frueh ingestierten linken Einzelseite die Seitenzahl, wird
-  genau dieser Pending-Speicher fuer den Uebergang verwendet
+  kein Satzrest aus einer vorherigen Aufnahme uebernommen. Der Pending-Speicher
+  dient nicht mehr als ungesicherter Fallback. Widerspruechlich nummerierte
+  Doppelseiten werden mit `page_number_sequence_valid=false` markiert und
+  auch als spaetere Satzrest-Quelle ausgeschlossen
+- Ausnahme bei vollstaendig und fortlaufend nummerierter aktueller Doppelseite:
+  fehlt die nummerierte Vorgaengerseite, wird der Satzrest einer unnummerierten
+  rechten `page_2.json` aus einer anderen Aufnahme verwendet. Eine vorhandene
+  Vorgaengerseite (auch ohne Satzrest) hat Vorrang; bei anschliessender
+  Nachnummerierung wird der Rest nicht doppelt eingefuegt
 - Satzrest von linker Seite wird aus der linken Seitenausgabe entfernt und an
   den Anfang der rechten Seitenausgabe verschoben
 - Worttrennung ueber Zeilen bleibt korrigiert

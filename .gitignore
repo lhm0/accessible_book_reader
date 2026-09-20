@@ -63,3 +63,6 @@ testdata/**
 *.onnx
 *.aiff
 calibration/out/*.npz
+
+# FTO-Berichte bleiben ausschließlich lokal
+/docs_DE/FTO_*

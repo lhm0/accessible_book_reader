@@ -66,3 +66,6 @@ calibration/out/*.npz
 
 # FTO-Berichte bleiben ausschließlich lokal
 /docs_DE/FTO_*
+
+# Lokale Antennenberechnung
+/hardware/electronics/work_on_progree_pn5180_board/NXP_antenna_matching.xls

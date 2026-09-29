@@ -546,6 +546,14 @@ ISO15693ErrorCode PN5180ISO15693::newpasswordICODESLIX2(uint8_t *newpassword, ui
  *   >0 = Error code
  */
 ISO15693ErrorCode PN5180ISO15693::issueISO15693Command(uint8_t *cmd, uint8_t cmdLen, uint8_t **resultPtr) {
+  commandRfValid = false;
+  commandRfStatus = 0;
+  commandRfSampleMs = 0;
+  commandTimedOut = false;
+  auto captureRf = [&]() {
+    commandRfSampleMs = millis();
+    commandRfValid = readRegister(RF_STATUS, &commandRfStatus);
+  };
 #ifdef DEBUG
   PN5180DEBUG(F("Issue Command 0x"));
   PN5180DEBUG(formatHex(cmd[1]));
@@ -558,18 +566,23 @@ ISO15693ErrorCode PN5180ISO15693::issueISO15693Command(uint8_t *cmd, uint8_t cmd
   delay(10);
   uint32_t status = getIRQStatus();
   if (0 == (status & RX_SOF_DET_IRQ_STAT)) {
+    commandTimedOut = true;
+    captureRf();
     return EC_NO_CARD;
   }
   const unsigned long start = millis();
   while (0 == (status & RX_IRQ_STAT)) {
     if (millis() - start >= kIso15693RxTimeoutMs) {
+      commandTimedOut = true;
+      captureRf();
       return ISO15693_EC_UNKNOWN_ERROR;
     }
     delay(10);
     status = getIRQStatus();
   }
 
-  uint32_t rxStatus;
+  captureRf();
+  uint32_t rxStatus = 0;
   readRegister(RX_STATUS, &rxStatus);
 
   PN5180DEBUG(F("RX-Status="));

@@ -387,3 +387,44 @@ Grund fuer die lokale Mitfuehrung:
 - reproduzierbarer Build ohne Registry-Zwang
 - dieselbe Repo-Strategie wie beim `pn532_gateway`
 - nur die fuer das Gateway benoetigte Arduino-Teilmenge liegt im Projekt
+
+## AGC-Ausgabe pro Leseversuch
+
+Bei STATUS-Probes und beim Polling erscheint auf USB-Serial eine `Messung`-Zeile
+auch dann, wenn kein Tag gelesen wurde. Protokoll, REQA/WUPA-Runde bzw. Inventory
+und `sample_ms` (Millisekunden seit Pico-Start) ordnen den Wert dem Versuch zu.
+Die UART-Antwortstruktur bleibt unveraendert.
+
+- `AGC_SAMPLE=last_rx_end`: RF_STATUS wurde nach Erkennen des letzten RX-Endes
+  gelesen, vor FIFO-Verarbeitung, Idle-Aufraeumen, RF-off und Reset. Bei Type A
+  ist dies normalerweise das letzte SAK; bei einem spaeteren Fehler kann es die
+  letzte erfolgreich abgeschlossene Empfangsphase derselben Runde sein.
+- `AGC_SAMPLE=timeout`: Registeraufnahme am Ende des erfolglosen Empfangswartens
+  (bei ISO15693 auch nach der initialen Wartezeit ohne SOF).
+- `AGC=-`: kein gueltiger Registerwert. Ein alter Wert wird nicht ersatzweise
+  ausgegeben. `AGC_SAMPLE=unavailable` bezeichnet einen fehlenden Snapshot.
+- Die Snapshot-Werte werden nach RF-off nicht nochmals aus dem Chip gelesen.
+  Die Meldung `Tag entfernt` enthaelt keine irrefuehrenden alten Messwerte mehr.
+
+AGC ist der 10-Bit-Regelwert aus RF_STATUS, keine kalibrierte Tag-Signalstaerke.
+Dies sind **Host-Snapshots**, keine Hardware-Latches des Wertes waehrend eines
+Telegramms. SPI-Zugriffe und das IRQ-Polling verursachen Verzoegerung (Type A
+1-ms-Pollpausen; ISO15693 bisherige 10-ms-Warteintervalle). Der PN5180 kann AGC
+inzwischen aktualisieren. Die Ausgabe garantiert die Zuordnung zur aktuellen
+Runde und die Aufnahme vor dem Aufraeumen, nicht einen konstanten AGC-Wert
+waehrend der gesamten Tag-Antwort. Die AGC-Regelung wird nicht eingefroren und
+EEPROM-/RF-Konfigurationen werden nicht veraendert.
+
+Referenz: NXP PN5180 Datenblatt, RF_STATUS/AGC_CONFIG und DPC Config:
+https://www.nxp.com/docs/en/data-sheet/PN5180A0XX_C3_C4.pdf
+
+Host-Regressionstest (Snapshot bei RX, Timeout und fehlgeschlagenem Registerlesen):
+
+```sh
+python3 tests/test_agc_snapshot.py
+```
+
+Hardware-Abnahme nach dem Flashen: STATUS ohne Tag, mit ISO14443A-Tag, mit
+ISO15693-Tag und nach Entfernen des Tags ausfuehren; auf Protokoll, Zeitstempel,
+Timeout-Markierung und fehlende Altwerte achten. Ein Host-Test ersetzt keine
+Messung der tatsaechlichen AGC-Dynamik am Reader.

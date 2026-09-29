@@ -66,6 +66,10 @@ struct PN5180TypeADiagResult {
   uint8_t uidLength = 0;
   bool irqStatusValid = false;
   uint32_t irqStatus = 0;
+  // Host snapshot at the last RX completion/timeout, before cleanup. Not an in-frame latch.
+  bool rfSampleCaptured = false;
+  bool rfSampleTimedOut = false;
+  unsigned long rfSampleMs = 0;
   bool rfStatusValid = false;
   uint32_t rfStatus = 0;
   bool rxStatusValid = false;

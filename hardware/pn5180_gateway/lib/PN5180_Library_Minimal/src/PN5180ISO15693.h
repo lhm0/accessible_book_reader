@@ -44,6 +44,11 @@ public:
 private:
   ISO15693ErrorCode issueISO15693Command(uint8_t *cmd, uint8_t cmdLen, uint8_t **resultPtr);
 public:
+  // Snapshot of the latest command, before FIFO processing/IRQ cleanup.
+  bool commandRfValid = false;
+  uint32_t commandRfStatus = 0;
+  unsigned long commandRfSampleMs = 0;
+  bool commandTimedOut = false;
   ISO15693ErrorCode getInventory(uint8_t *uid);
 
   ISO15693ErrorCode readSingleBlock(uint8_t *uid, uint8_t blockNo, uint8_t *blockData, uint8_t blockSize);

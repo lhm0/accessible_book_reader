@@ -1419,7 +1419,7 @@ class Reader {
     *snapshot = TagSnapshot{};
     String sampledUid("-");
     uint8_t sampledUidLength = 0;
-    const TagReadOutcome outcome = sampleTagQuiet(protocol, &sampledUid, &sampledUidLength);
+    const TagReadOutcome outcome = sampleTagQuiet(protocol, &sampledUid, &sampledUidLength, true);
     if (outcome != TagReadOutcome::TagFound) {
       return outcome;
     }
@@ -1644,6 +1644,45 @@ class Reader {
     return true;
   }
 
+  void clearMeasurementMetrics() {
+    lastRfStatusValid_ = false;
+    lastRfStatus_ = 0;
+    lastAgcValue_ = 0;
+    lastRxStatusValid_ = false;
+    lastRxStatus_ = 0;
+    lastRxBytes_ = 0;
+  }
+
+  void applyInventoryMetrics() {
+    clearMeasurementMetrics();
+    lastRfStatusValid_ = iso15693_.commandRfValid;
+    lastRfStatus_ = lastRfStatusValid_ ? iso15693_.commandRfStatus : 0;
+    lastAgcValue_ = static_cast<uint16_t>(lastRfStatus_ & kRfStatusAgcMask);
+    refreshRxMetrics();
+  }
+
+  void printAgcSample(ProtocolMode protocol, const char* attempt, bool found,
+                      unsigned long sampleMs, bool timedOut, bool captured) {
+    Serial.print(F("["));
+    Serial.print(label_);
+    Serial.print(F("] Messung: Tech="));
+    Serial.print(protocolToString(protocol));
+    Serial.print(F(", Versuch="));
+    Serial.print(attempt);
+    Serial.print(F(", Tag="));
+    Serial.print(found ? F("ja") : F("nicht_gelesen"));
+    Serial.print(F(", AGC="));
+    if (captured && lastRfStatusValid_) Serial.print(lastAgcValue_);
+    else Serial.print(F("-"));
+    Serial.print(F(", AGC_SAMPLE="));
+    Serial.print(!captured ? F("unavailable") :
+                 (timedOut ? F("timeout") : F("last_rx_end")));
+    Serial.print(F(", sample_ms="));
+    if (captured) Serial.print(sampleMs);
+    else Serial.print(F("-"));
+    Serial.println();
+  }
+
   void applyTypeADiagMetrics(const PN5180TypeADiagResult& diag) {
     lastRfStatusValid_ = diag.rfStatusValid;
     lastRfStatus_ = diag.rfStatusValid ? diag.rfStatus : 0;
@@ -1665,6 +1704,7 @@ class Reader {
       *uidLength = 0;
     }
 
+    clearMeasurementMetrics();
     bool anyRoundCompleted = false;
     PN5180TypeADiagResult diag;
     if (executeTypeADiagRound(0, &diag)) {
@@ -1681,6 +1721,7 @@ class Reader {
       }
     }
 
+    clearMeasurementMetrics();
     if (executeTypeADiagRound(1, &diag)) {
       anyRoundCompleted = true;
       applyTypeADiagMetrics(diag);
@@ -1698,11 +1739,15 @@ class Reader {
     return anyRoundCompleted ? TagReadOutcome::NoTag : TagReadOutcome::ReaderError;
   }
 
-  TagReadOutcome sampleTagQuiet(ProtocolMode protocol, String* uidString, uint8_t* uidLength) {
+  TagReadOutcome sampleTagQuiet(ProtocolMode protocol, String* uidString, uint8_t* uidLength,
+                                bool logSamples = false) {
+    clearMeasurementMetrics();
     if (protocol == ProtocolMode::Iso14443A) {
       uint8_t uid[7] = {0};
       uint8_t detectedUidLength = 0;
+      logAgcAttempts_ = logSamples;
       const TagReadOutcome outcome = readTypeATagRobustDetailed(uid, &detectedUidLength);
+      logAgcAttempts_ = false;
       if (outcome != TagReadOutcome::TagFound) {
         return outcome;
       }
@@ -1716,11 +1761,18 @@ class Reader {
     }
 
     if (!ensureProtocol(protocol)) {
+      if (logSamples) printAgcSample(protocol, "setup", false, 0, false, false);
       return TagReadOutcome::ReaderError;
     }
 
     uint8_t uid[8] = {0};
     const ISO15693ErrorCode rc = iso15693_.getInventory(uid);
+    applyInventoryMetrics();
+    if (logSamples) {
+      printAgcSample(protocol, "inventory", rc == ISO15693_EC_OK,
+                     iso15693_.commandRfSampleMs, iso15693_.commandTimedOut,
+                     iso15693_.commandRfValid);
+    }
     if (rc == EC_NO_CARD) {
       return TagReadOutcome::NoTag;
     }
@@ -1734,8 +1786,6 @@ class Reader {
     if (uidString != nullptr) {
       *uidString = uidToString(uid, sizeof(uid), true);
     }
-    refreshRfMetrics();
-    refreshRxMetrics();
     return TagReadOutcome::TagFound;
   }
 
@@ -1899,26 +1949,7 @@ class Reader {
       Serial.print(lastUidString_);
       Serial.print(F(", Tech="));
       Serial.print(protocolToString(lastProtocol_));
-      Serial.print(F(", AGC="));
-      if (lastRfStatusValid_) {
-        Serial.print(lastAgcValue_);
-      } else {
-        Serial.print(F("-"));
-      }
-      Serial.print(F(", RF_STATUS="));
-      if (lastRfStatusValid_) {
-        Serial.print(formatHex32(lastRfStatus_));
-      } else {
-        Serial.print(F("-"));
-      }
-      Serial.print(F(", RX_STATUS="));
-      if (lastRxStatusValid_) {
-        Serial.print(formatHex32(lastRxStatus_));
-        Serial.print(F(", RX_LEN="));
-        Serial.println(lastRxBytes_);
-      } else {
-        Serial.println(F("-"));
-      }
+      Serial.println();
     }
 
     clearTagState();
@@ -1927,6 +1958,7 @@ class Reader {
   }
 
   bool tryReadTag(ProtocolMode protocol, uint8_t* iso14443UidLength, ISO15693ErrorCode* iso15693Rc) {
+    clearMeasurementMetrics();
     if (kVerbosePollDebug) {
       Serial.print(F("["));
       Serial.print(label_);
@@ -1935,6 +1967,7 @@ class Reader {
     }
 
     if (!ensureProtocol(protocol)) {
+      printAgcSample(protocol, "setup", false, 0, false, false);
       if (kVerbosePollDebug) {
         Serial.print(F("["));
         Serial.print(label_);
@@ -1947,7 +1980,10 @@ class Reader {
     if (protocol == ProtocolMode::Iso14443A) {
       uint8_t uid[7] = {0};
       uint8_t uidLength = 0;
-      if (!readTypeATagRobust(uid, &uidLength)) {
+      logAgcAttempts_ = true;
+      const bool found = readTypeATagRobust(uid, &uidLength);
+      logAgcAttempts_ = false;
+      if (!found) {
         if (iso14443UidLength != nullptr) {
           *iso14443UidLength = uidLength;
         }
@@ -1967,9 +2003,13 @@ class Reader {
 
     uint8_t uid[8] = {0};
     const ISO15693ErrorCode rc = iso15693_.getInventory(uid);
+    applyInventoryMetrics();
     if (iso15693Rc != nullptr) {
       *iso15693Rc = rc;
     }
+    printAgcSample(protocol, "inventory", rc == ISO15693_EC_OK,
+                   iso15693_.commandRfSampleMs, iso15693_.commandTimedOut,
+                   iso15693_.commandRfValid);
     if (rc == ISO15693_EC_OK) {
       updateTag(uid, sizeof(uid), protocol, true);
       return true;
@@ -1993,9 +2033,7 @@ class Reader {
         uidLength != lastUidLength_ ||
         memcmp(lastUid_, uid, uidLength) != 0;
 
-    refreshRfMetrics();
-    refreshRxMetrics();
-
+    // Metrics were captured by the read attempt, before RF-off/reset.
     tagPresent_ = true;
     lastUidLength_ = uidLength;
     memcpy(lastUid_, uid, uidLength);
@@ -2180,16 +2218,28 @@ class Reader {
     hardReset();
     activeProtocol_ = ProtocolMode::None;
     if (!refreshSystemStatus() || !ensureProtocol(ProtocolMode::Iso14443A)) {
+      if (logAgcAttempts_) {
+        clearMeasurementMetrics();
+        printAgcSample(ProtocolMode::Iso14443A, kind == 0 ? "REQA" : "WUPA",
+                       false, 0, false, false);
+      }
       return false;
     }
 
     static_cast<void>(iso14443_.runTypeADiag(diag, kind));
+    if (logAgcAttempts_ && diag != nullptr) {
+      applyTypeADiagMetrics(*diag);
+      printAgcSample(ProtocolMode::Iso14443A, kind == 0 ? "REQA" : "WUPA",
+                     diag->success, diag->rfSampleMs, diag->rfSampleTimedOut,
+                     diag->rfSampleCaptured);
+    }
     static_cast<void>(iso14443_.setRF_off());
     delay(kTypeAFieldResetDelayMs);
     activeProtocol_ = ProtocolMode::None;
     return true;
   }
 
+  bool logAgcAttempts_ = false;
   uint8_t id_;
   const char* label_;
   uint8_t nssPin_;

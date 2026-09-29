@@ -79,8 +79,10 @@ void captureTypeADiagStatus(PN5180ISO14443* reader, PN5180TypeADiagResult* resul
     return;
   }
 
-  result->irqStatusValid = reader->readRegister(IRQ_STATUS, &result->irqStatus);
+  result->rfSampleCaptured = true;
+  result->rfSampleMs = millis();
   result->rfStatusValid = reader->readRegister(RF_STATUS, &result->rfStatus);
+  result->irqStatusValid = reader->readRegister(IRQ_STATUS, &result->irqStatus);
   result->rxStatusValid = reader->readRegister(RX_STATUS, &result->rxStatus);
   if (result->rxStatusValid) {
     result->rxLength = static_cast<uint16_t>(result->rxStatus & 0x000001FF);
@@ -102,6 +104,8 @@ bool waitForTypeAResponse(PN5180ISO14443* reader, PN5180TypeADiagResult* result)
 
     if (irqOk && ((irqStatus & RX_IRQ_STAT) != 0)) {
       if (result != nullptr) {
+        result->rfSampleTimedOut = false;
+        captureTypeADiagStatus(reader, result);
         result->irqStatusValid = true;
         result->irqStatus = irqStatus;
         result->rxStatusValid = rxOk;
@@ -114,6 +118,9 @@ bool waitForTypeAResponse(PN5180ISO14443* reader, PN5180TypeADiagResult* result)
     delay(1);
   }
 
+  if (result != nullptr) {
+    result->rfSampleTimedOut = true;
+  }
   captureTypeADiagStatus(reader, result);
   return false;
 }
@@ -219,9 +226,9 @@ uint8_t activateTypeAImpl(PN5180ISO14443* reader, uint8_t* buffer, uint8_t kind,
   auto fail = [&](PN5180TypeADiagStage stage, bool refreshStatus) -> uint8_t {
     if (result != nullptr) {
       result->stage = stage;
-      if (refreshStatus) {
-        captureTypeADiagStatus(reader, result);
-      }
+      // Keep the last RX/timeout snapshot; cleanup can change the live AGC.
+      // Without a completed wait there is no measurement to advertise.
+      (void)refreshStatus;
     }
     static_cast<void>(forceTypeAIdle(reader));
     return 0;
@@ -418,7 +425,7 @@ uint8_t activateTypeAImpl(PN5180ISO14443* reader, uint8_t* buffer, uint8_t kind,
     result->stage = PN5180_TA_STAGE_SUCCESS;
     result->uidLength = uidLength;
     memcpy(result->uid, buffer + 3, uidLength > 7 ? 7 : uidLength);
-    captureTypeADiagStatus(reader, result);
+    // waitForTypeAResponse already captured the final SAK before forceTypeAIdle.
   }
   return uidLength;
 }

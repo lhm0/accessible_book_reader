@@ -1,5 +1,19 @@
 # Accessible Book Reader
 
+## Update vom 3. Oktober 2026
+
+Die Konstruktionsdateien (`.f3z` / `.f3d`) und zugehörigen STL-Dateien für
+`front`, `front2`, `back`, `back2` sowie deren `_dev`-Varianten wurden
+aktualisiert, um einen Konstruktionsfehler zu beheben.
+
+Das Teil `camera_block` wurde außerdem so überarbeitet, dass es einfacher
+und in höherer Qualität gedruckt werden kann. Es besteht nun aus zwei Teilen,
+die mit einer einzelnen Schraube verbunden werden.
+
+![Überarbeiteter zweiteiliger Kamerablock](images/img0049.jpg)
+
+## Projektübersicht
+
 **Gedruckte Bücher hören – und auf Tastendruck erfahren, was bisher geschah.**
 
 ![Accessible Book Reader mit aufgelegtem Buch, Lautsprecher, drei Tasten und Lautstärkeregler](images/img0002.jpg)

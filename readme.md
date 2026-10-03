@@ -1,5 +1,18 @@
 # Accessible Book Reader
 
+## update October 3rd, 2026
+
+The design files (`.f3z` / `.f3d`) and corresponding STL files for `front`,
+`front2`, `back`, `back2`, and their `_dev` variants have been updated to
+correct a design error.
+
+The `camera_block` has also been redesigned for easier, higher-quality
+printing. It now consists of two parts joined with a single screw.
+
+![Updated two-part camera block](images/img0049.jpg)
+
+## Project overview
+
 **Listen to printed books – and catch up on the story at the press of a button.**
 
 ![Accessible Book Reader with a book in place, a speaker, three buttons and a volume knob](images/img0002.jpg)
